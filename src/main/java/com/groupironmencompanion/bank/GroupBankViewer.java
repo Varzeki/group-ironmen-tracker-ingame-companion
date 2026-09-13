@@ -198,19 +198,8 @@ public class GroupBankViewer
 	/** Everything the whole group owns, summed per item and sorted by total value. */
 	private List<Entry> aggregateEntries()
 	{
+		// Group storage is already part of the totals; adding it here counted it twice.
 		Map<Integer, Long> totals = groupState.getGroupTotals();
-
-		GroupMember shared = groupState.getSharedBank();
-		if (shared != null)
-		{
-			for (ItemStack item : shared.getBank())
-			{
-				if (!item.isEmpty())
-				{
-					totals.merge(item.getId(), (long) item.getQuantity(), Long::sum);
-				}
-			}
-		}
 
 		List<Entry> entries = new ArrayList<>(totals.size());
 		for (Map.Entry<Integer, Long> total : totals.entrySet())

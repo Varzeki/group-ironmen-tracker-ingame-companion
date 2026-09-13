@@ -103,18 +103,8 @@ class ItemSearchView extends JPanel
 			return;
 		}
 
+		// Includes group storage already, so the per-owner breakdown below adds up to it.
 		Map<Integer, Long> totals = groupState.getGroupTotals();
-		GroupMember shared = groupState.getSharedBank();
-		if (shared != null)
-		{
-			shared.getBank().forEach(item ->
-			{
-				if (!item.isEmpty())
-				{
-					totals.merge(item.getId(), (long) item.getQuantity(), Long::sum);
-				}
-			});
-		}
 
 		clientThread.invoke(() ->
 		{

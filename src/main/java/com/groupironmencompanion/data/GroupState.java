@@ -165,6 +165,9 @@ public class GroupState
 	 * Total quantity of every item the group owns, keyed by item id, summed over each
 	 * member's bank, inventory, equipment, rune pouch, seed vault and quiver plus the
 	 * shared bank. Iteration order is insertion order; callers sort as they need.
+	 * <p>
+	 * Group storage is one of the entries in {@code members}, so it is counted here like any
+	 * other member. Callers must not add {@link #getSharedBank()} on top of this.
 	 */
 	public Map<Integer, Long> getGroupTotals()
 	{

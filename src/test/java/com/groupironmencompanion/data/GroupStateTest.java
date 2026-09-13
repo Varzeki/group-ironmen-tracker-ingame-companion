@@ -12,6 +12,8 @@ import static org.junit.Assert.assertTrue;
 /** Covers the delta merge and the shared member list handed to the render paths. */
 public class GroupStateTest
 {
+	private static final int BIG_BONES = 532;
+
 	private static MemberDto member(String name, int[] skills)
 	{
 		MemberDto dto = new MemberDto();
@@ -32,6 +34,27 @@ public class GroupStateTest
 		assertEquals("alice", members.get(0).getName());
 		assertEquals("Zed", members.get(1).getName());
 		assertNotNull(state.getSharedBank());
+	}
+
+	private static MemberDto withBank(String name, int[] bank)
+	{
+		MemberDto dto = new MemberDto();
+		dto.name = name;
+		dto.bank = bank;
+		return dto;
+	}
+
+	@Test
+	public void groupStorageIsCountedOnceInTheGroupTotals()
+	{
+		// Group storage arrives as its own member, so a caller that added getSharedBank() on
+		// top of the totals counted every shared stack twice.
+		GroupState state = new GroupState();
+		state.applyUpdate(new MemberDto[]{
+			withBank("alice", new int[]{BIG_BONES, 2700}),
+			withBank("@SHARED", new int[]{BIG_BONES, 1400})});
+
+		assertEquals(Long.valueOf(4100), state.getGroupTotals().get(BIG_BONES));
 	}
 
 	@Test
