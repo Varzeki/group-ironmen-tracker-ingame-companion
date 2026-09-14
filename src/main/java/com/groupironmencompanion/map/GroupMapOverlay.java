@@ -17,6 +17,7 @@ import java.util.List;
 import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.Point;
 import net.runelite.api.coords.WorldPoint;
@@ -36,6 +37,7 @@ import net.runelite.client.ui.overlay.OverlayPosition;
  * menu entry is created, no game widget is touched, and jumping the map view is a client-side
  * call that sends nothing to the server.
  */
+@Slf4j
 @Singleton
 public class GroupMapOverlay extends Overlay
 {
@@ -73,6 +75,15 @@ public class GroupMapOverlay extends Overlay
 	/** Rows of the last drawn frame, published for the AWT-side input handler. */
 	private volatile List<Row> rows = Collections.emptyList();
 
+	/**
+	 * The overworld map, remembered while it is the one on screen.
+	 * <p>
+	 * There is no way to ask the client for a particular map, only for the one currently
+	 * loaded, so this is captured whenever the overworld happens to be showing. That is the
+	 * state the map opens in, so in practice it is captured almost immediately.
+	 */
+	private volatile WorldMapData surfaceMap;
+
 	@Inject
 	public GroupMapOverlay()
 	{
@@ -95,6 +106,8 @@ public class GroupMapOverlay extends Overlay
 			rows = Collections.emptyList();
 			return null;
 		}
+
+		rememberSurfaceMap();
 
 		List<GroupMember> members = new ArrayList<>();
 		for (GroupMember member : groupState.getMembers())
@@ -177,18 +190,39 @@ public class GroupMapOverlay extends Overlay
 	}
 
 	/**
+	 * Notes the overworld map while it is on screen, so it can be returned to later.
+	 * Lumbridge is unambiguously on the overworld, so a map containing it is that map.
+	 */
+	private void rememberSurfaceMap()
+	{
+		WorldMap worldMap = client.getWorldMap();
+		WorldMapData data = worldMap == null ? null : worldMap.getWorldMapData();
+		if (data != null && data.surfaceContainsPosition(3222, 3218))
+		{
+			surfaceMap = data;
+		}
+	}
+
+	/**
 	 * Centres the world map on a member. Client thread only.
 	 * <p>
-	 * A member in a dungeon has world coordinates that are not on the overworld map, so
-	 * targeting them directly does nothing at all: there is nowhere on the displayed map to
-	 * go. When that is the case the map jumps to the surface entrance instead, which is where
-	 * their pin actually is from this view. Navigate into the dungeon's own map and the same
-	 * click then goes to their true position, because the displayed map now covers it.
+	 * The map only moves to somewhere the map currently on screen actually covers, so this
+	 * works out what is reachable from the present view before asking:
+	 * <ol>
+	 * <li>their true position, when the displayed map covers it, which is the case on the
+	 * overworld and inside the dungeon they are actually in;</li>
+	 * <li>otherwise the surface entrance leading to them, which is where their pin is when
+	 * looking at the overworld;</li>
+	 * <li>and if neither is on the displayed map, which happens while looking at some other
+	 * dungeon, back to the overworld first and then to the entrance.</li>
+	 * </ol>
+	 * Without that last step, clicking a member from inside an unrelated dungeon map simply
+	 * did nothing, because every candidate position lay outside the map being drawn.
 	 */
 	void jumpTo(GroupMember member)
 	{
-		WorldPoint target = member == null ? null : member.getWorldPoint();
-		if (target == null)
+		WorldPoint truePosition = member == null ? null : member.getWorldPoint();
+		if (truePosition == null)
 		{
 			return;
 		}
@@ -200,16 +234,39 @@ public class GroupMapOverlay extends Overlay
 		}
 
 		WorldMapData data = worldMap.getWorldMapData();
-		if (data != null && !data.surfaceContainsPosition(target.getX(), target.getY()))
+		if (data == null || data.surfaceContainsPosition(truePosition.getX(), truePosition.getY()))
 		{
-			WorldPoint entrance = markers.getDrawnEntrance(member.getName(), target);
-			if (entrance != null)
-			{
-				target = entrance;
-			}
+			worldMap.setWorldMapPositionTarget(truePosition);
+			return;
 		}
 
-		worldMap.setWorldMapPositionTarget(target);
+		// Underground members have an entrance on the surface; members already on the surface
+		// are their own target.
+		WorldPoint entrance = markers.getDrawnEntrance(member.getName(), truePosition);
+		WorldPoint surfaceTarget = entrance != null ? entrance : truePosition;
+
+		if (data.surfaceContainsPosition(surfaceTarget.getX(), surfaceTarget.getY()))
+		{
+			worldMap.setWorldMapPositionTarget(surfaceTarget);
+			return;
+		}
+
+		WorldMapData surface = surfaceMap;
+		if (surface == null)
+		{
+			// The overworld has not been seen this session, so there is nothing to return to.
+			return;
+		}
+
+		try
+		{
+			worldMap.initializeWorldMap(surface);
+			worldMap.setWorldMapPositionTarget(surfaceTarget);
+		}
+		catch (RuntimeException e)
+		{
+			log.debug("Could not switch the world map back to the overworld", e);
+		}
 	}
 
 	/** The member whose row contains this canvas point, or null. */
