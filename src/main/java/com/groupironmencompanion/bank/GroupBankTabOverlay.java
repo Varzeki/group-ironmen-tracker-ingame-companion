@@ -2,9 +2,8 @@ package com.groupironmencompanion.bank;
 
 import com.groupironmencompanion.GroupIronmenCompanionConfig;
 import java.awt.BasicStroke;
-import java.awt.Color;
 import java.awt.Dimension;
-import java.awt.Font;
+import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import javax.annotation.Nullable;
@@ -40,7 +39,7 @@ public class GroupBankTabOverlay extends Overlay
 	private static final int TOP_MARGIN = 24;
 	private static final int SIDE_MARGIN = 4;
 
-	private static final Font FONT = new Font(Font.SANS_SERIF, Font.BOLD, 11);
+	private static final BasicStroke BORDER_STROKE = new BasicStroke(1f);
 
 	@Inject
 	private Client client;
@@ -94,13 +93,16 @@ public class GroupBankTabOverlay extends Overlay
 		}
 
 		graphics.setColor(BankStyle.BORDER);
-		graphics.setStroke(new BasicStroke(1f));
+		graphics.setStroke(BORDER_STROKE);
 		graphics.drawRect(tab.x, tab.y, tab.width - 1, tab.height - 1);
 
-		graphics.setFont(FONT);
-		graphics.setColor(active || hovered ? Color.WHITE : BankStyle.TEXT);
-		int textWidth = graphics.getFontMetrics().stringWidth("Group");
-		graphics.drawString("Group", tab.x + (tab.width - textWidth) / 2, tab.y + 15);
+		GameText.prepare(graphics);
+		graphics.setFont(GameText.REGULAR);
+		FontMetrics metrics = graphics.getFontMetrics();
+		int textWidth = metrics.stringWidth("Group");
+		GameText.drawShadowed(graphics, "Group", tab.x + (tab.width - textWidth) / 2,
+			GameText.centredBaseline(metrics, tab.y, tab.height),
+			active || hovered ? GameText.HOVER : GameText.ORANGE);
 
 		return null;
 	}

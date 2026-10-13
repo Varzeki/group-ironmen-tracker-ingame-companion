@@ -6,7 +6,6 @@ import com.groupironmencompanion.data.GroupState;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
-import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
@@ -14,7 +13,6 @@ import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import net.runelite.api.Client;
@@ -45,6 +43,10 @@ public class GroupBankOverlay extends Overlay
 	static final int CELL_HEIGHT = 36;
 	static final int VISIBLE_ROWS = 7;
 
+	/** The size of an item sprite, which the game anchors stack quantities to. */
+	private static final int ITEM_WIDTH = 36;
+	private static final int ITEM_HEIGHT = 32;
+
 	private static final int PADDING = 8;
 	private static final int TITLE_HEIGHT = 22;
 	private static final int TAB_HEIGHT = 20;
@@ -65,8 +67,14 @@ public class GroupBankOverlay extends Overlay
 	static final int WIDTH =
 		PADDING * 2 + GroupBankViewer.COLUMNS * CELL_WIDTH + SCROLLBAR_WIDTH;
 
-	private static final Font TAB_FONT = new Font(Font.SANS_SERIF, Font.PLAIN, 11);
-	private static final Font QUANTITY_FONT = new Font(Font.SANS_SERIF, Font.PLAIN, 11);
+	/**
+	 * Where the game draws a stack's quantity, relative to the top-left of its 36x32 item
+	 * sprite: the small font's baseline sits 9px down at the sprite's left edge.
+	 */
+	private static final int QUANTITY_X = 0;
+	private static final int QUANTITY_BASELINE = 9;
+
+	private static final BasicStroke BORDER_STROKE = new BasicStroke(1f);
 
 	/** Matches the skills hover panel, which is dark enough to stay readable over the bank. */
 	private static final Color TOOLTIP_BACKGROUND = new Color(22, 19, 15, 235);
@@ -136,10 +144,11 @@ public class GroupBankOverlay extends Overlay
 			: new java.awt.Point(mouse.getX() - origin.x, mouse.getY() - origin.y);
 
 		frameTabs = new ArrayList<>();
+		GameText.prepare(graphics);
 
 		// Tabs are laid out before anything is drawn, because how many rows they need
 		// decides how tall the window is.
-		graphics.setFont(TAB_FONT);
+		graphics.setFont(GameText.REGULAR);
 		List<List<TabSlot>> layout = layoutTabs(graphics.getFontMetrics(), viewer.getTabs());
 		tabRows = Math.max(1, layout.size());
 		int height = heightFor(tabRows);
@@ -167,7 +176,7 @@ public class GroupBankOverlay extends Overlay
 		graphics.setColor(BankStyle.BACKGROUND);
 		graphics.fillRect(0, 0, WIDTH, height);
 		graphics.setColor(BankStyle.BORDER);
-		graphics.setStroke(new BasicStroke(1f));
+		graphics.setStroke(BORDER_STROKE);
 		graphics.drawRect(0, 0, WIDTH - 1, height - 1);
 	}
 
@@ -176,15 +185,13 @@ public class GroupBankOverlay extends Overlay
 		graphics.setColor(BankStyle.TITLE_BACKGROUND);
 		graphics.fillRect(1, 1, WIDTH - 2, TITLE_HEIGHT - 1);
 
-		graphics.setColor(BankStyle.TEXT);
-		graphics.setFont(TAB_FONT.deriveFont(Font.BOLD, 12f));
-		graphics.drawString("Group Bank  (view only)", PADDING, 15);
+		graphics.setFont(GameText.BOLD);
+		GameText.drawShadowed(graphics, "Group Bank (view only)", PADDING, 16, GameText.ORANGE);
 
 		Rectangle close = new Rectangle(WIDTH - 20, 4, 14, 14);
 		boolean hovered = close.contains(local);
-		graphics.setColor(hovered ? Color.WHITE : BankStyle.TEXT_DIM);
-		graphics.setFont(TAB_FONT.deriveFont(Font.BOLD, 12f));
-		graphics.drawString("x", close.x + 5, close.y + 11);
+		GameText.drawShadowed(graphics, "x", close.x + 4, close.y + 12,
+			hovered ? GameText.HOVER : GameText.ORANGE);
 
 		frameClose = toCanvas(close, origin);
 		return TITLE_HEIGHT;
@@ -235,7 +242,7 @@ public class GroupBankOverlay extends Overlay
 	private int drawTabs(Graphics2D graphics, java.awt.Point origin, int top,
 		java.awt.Point local, List<List<TabSlot>> layout)
 	{
-		graphics.setFont(TAB_FONT);
+		graphics.setFont(GameText.REGULAR);
 
 		int y = top;
 		for (List<TabSlot> row : layout)
@@ -254,8 +261,9 @@ public class GroupBankOverlay extends Overlay
 					graphics.fillRect(rect.x, rect.y, rect.width, rect.height);
 				}
 
-				graphics.setColor(active ? Color.WHITE : colourForTab(slot.tab));
-				graphics.drawString(slot.label, rect.x + 6, rect.y + rect.height - 5);
+				boolean lit = active || rect.contains(local);
+				GameText.drawShadowed(graphics, slot.label, rect.x + 6, rect.y + rect.height - 3,
+					lit ? GameText.HOVER : GameText.ORANGE);
 
 				frameTabs.add(new TabHit(slot.tab, toCanvas(rect, origin)));
 			}
@@ -291,7 +299,7 @@ public class GroupBankOverlay extends Overlay
 		graphics.setColor(viewer.isSearchFocused() ? BankStyle.TEXT : BankStyle.BORDER);
 		graphics.drawRect(rect.x, rect.y, rect.width, rect.height);
 
-		graphics.setFont(TAB_FONT);
+		graphics.setFont(GameText.REGULAR);
 		String filter = viewer.getFilter();
 		String text;
 		Color colour;
@@ -308,11 +316,10 @@ public class GroupBankOverlay extends Overlay
 		else
 		{
 			text = "Click here to search";
-			colour = BankStyle.TEXT_DIM;
+			colour = rect.contains(local) ? GameText.HOVER : GameText.ORANGE;
 		}
 
-		graphics.setColor(colour);
-		graphics.drawString(text, rect.x + 5, rect.y + rect.height - 4);
+		GameText.drawShadowed(graphics, text, rect.x + 5, rect.y + rect.height - 3, colour);
 
 		frameSearch = toCanvas(rect, origin);
 		return top + SEARCH_HEIGHT;
@@ -327,12 +334,11 @@ public class GroupBankOverlay extends Overlay
 		List<GroupBankViewer.Row> rows = viewer.getRows();
 		if (rows.isEmpty())
 		{
-			graphics.setColor(BankStyle.TEXT_DIM);
-			graphics.setFont(TAB_FONT);
+			graphics.setFont(GameText.REGULAR);
 			String message = viewer.getFilter().isEmpty()
 				? "No data yet. Check your group name and token."
 				: "Nothing matches \"" + viewer.getFilter() + "\"";
-			graphics.drawString(message, area.x + 4, area.y + 18);
+			GameText.drawShadowed(graphics, message, area.x + 4, area.y + 18, GameText.ORANGE);
 			return;
 		}
 
@@ -348,9 +354,8 @@ public class GroupBankOverlay extends Overlay
 
 			if (row.isHeader())
 			{
-				graphics.setColor(BankStyle.TEXT);
-				graphics.setFont(TAB_FONT.deriveFont(Font.BOLD));
-				graphics.drawString(row.getHeader(), area.x + 2, y + 15);
+				graphics.setFont(GameText.REGULAR);
+				GameText.drawShadowed(graphics, row.getHeader(), area.x + 2, y + 15, GameText.ORANGE);
 				graphics.setColor(BankStyle.BORDER);
 				graphics.drawLine(area.x + 2, y + 19, area.x + area.width - 4, y + 19);
 				y += CELL_HEIGHT;
@@ -396,12 +401,13 @@ public class GroupBankOverlay extends Overlay
 
 		if (quantity > 1)
 		{
-			graphics.setFont(QUANTITY_FONT);
-			String label = BankStyle.shortQuantity(quantity);
-			graphics.setColor(Color.BLACK);
-			graphics.drawString(label, x + 3, y + 12);
-			graphics.setColor(BankStyle.quantityColour(quantity));
-			graphics.drawString(label, x + 2, y + 11);
+			// Anchored to where the item sprite sits, the way the game anchors it, rather
+			// than to the cell, so it stays put whatever the cell's padding.
+			int imageX = x + (CELL_WIDTH - ITEM_WIDTH) / 2;
+			int imageY = y + (CELL_HEIGHT - ITEM_HEIGHT) / 2;
+			graphics.setFont(GameText.SMALL);
+			GameText.drawShadowed(graphics, BankStyle.shortQuantity(quantity),
+				imageX + QUANTITY_X, imageY + QUANTITY_BASELINE, BankStyle.quantityColour(quantity));
 		}
 
 		if (hovered)
@@ -435,8 +441,7 @@ public class GroupBankOverlay extends Overlay
 
 	private void drawFooter(Graphics2D graphics, int height)
 	{
-		graphics.setFont(TAB_FONT);
-		graphics.setColor(BankStyle.TEXT_DIM);
+		graphics.setFont(GameText.SMALL);
 
 		StringBuilder text = new StringBuilder();
 		text.append(viewer.getVisibleItemCount()).append(" stacks");
@@ -445,7 +450,7 @@ public class GroupBankOverlay extends Overlay
 			text.append("  ·  ").append(BankStyle.gp(viewer.getVisibleValue()))
 				.append(config.natureRuneCost() > 0 ? " alch profit" : " alch");
 		}
-		graphics.drawString(text.toString(), PADDING, height - 6);
+		GameText.drawShadowed(graphics, text.toString(), PADDING, height - 6, GameText.ORANGE);
 	}
 
 	// ------------------------------------------------------------------
@@ -592,17 +597,6 @@ public class GroupBankOverlay extends Overlay
 	private static Rectangle toCanvas(Rectangle local, java.awt.Point origin)
 	{
 		return new Rectangle(local.x + origin.x, local.y + origin.y, local.width, local.height);
-	}
-
-	@Nullable
-	private Color colourForTab(String tab)
-	{
-		if (GroupBankViewer.TAB_ALL.equals(tab) || GroupBankViewer.TAB_SHARED.equals(tab))
-		{
-			return BankStyle.TEXT;
-		}
-		GroupMember member = groupState.getMember(tab);
-		return member != null ? member.getColour() : BankStyle.TEXT;
 	}
 
 	private static String abbreviate(String text, FontMetrics metrics, int maxWidth)
