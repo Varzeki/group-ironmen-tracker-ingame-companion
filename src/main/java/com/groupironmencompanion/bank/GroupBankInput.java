@@ -203,7 +203,9 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 		{
 			return event;
 		}
-		if (!overlay.getHits().grid.contains(event.getPoint()))
+		// Anywhere in the window, not only over the grid: a turn over the title, the tabs or
+		// the search box otherwise fell through to the game and zoomed the camera.
+		if (!overlay.getHits().window.contains(event.getPoint()))
 		{
 			return event;
 		}
