@@ -44,6 +44,7 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.events.PluginChanged;
+import net.runelite.client.events.PluginMessage;
 import net.runelite.client.input.KeyManager;
 import net.runelite.client.input.MouseManager;
 import net.runelite.client.game.ItemManager;
@@ -464,6 +465,12 @@ public class GroupIronmenCompanionPlugin extends Plugin
 		{
 			bankInput.closeAll();
 		}
+	}
+
+	@Subscribe
+	public void onPluginMessage(PluginMessage event)
+	{
+		routeTracker.onPluginMessage(event);
 	}
 
 	@Subscribe

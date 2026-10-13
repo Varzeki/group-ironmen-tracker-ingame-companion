@@ -8,6 +8,7 @@ import javax.inject.Singleton;
 import net.runelite.api.Client;
 import net.runelite.api.Player;
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.client.events.PluginMessage;
 
 /**
  * Keeps a Shortest Path route pointed at a moving group member.
@@ -20,6 +21,10 @@ import net.runelite.api.coords.WorldPoint;
  * Arrival is judged against the member's <em>true</em> position, including plane, not the
  * surface entrance drawn on the overworld map: following someone into a dungeon should not
  * count as done the moment you reach the ladder.
+ * <p>
+ * Before each retarget, Shortest Path is asked whether it is still showing our route. If the
+ * player cleared it, or set a route of their own, following stops there instead of putting
+ * our route back over theirs.
  */
 @Singleton
 public class RouteTracker
@@ -41,6 +46,9 @@ public class RouteTracker
 
 	private volatile String targetName;
 	private WorldPoint lastRouted;
+
+	/** Where to route next, held while Shortest Path is asked whether our route is still up. */
+	private WorldPoint pendingRetarget;
 
 	/** The member currently being routed to, or null when no route is active. */
 	@Nullable
@@ -69,6 +77,7 @@ public class RouteTracker
 
 		targetName = member.getName();
 		lastRouted = null;
+		pendingRetarget = null;
 		update();
 	}
 
@@ -80,6 +89,7 @@ public class RouteTracker
 		}
 		targetName = null;
 		lastRouted = null;
+		pendingRetarget = null;
 		bridge.clear();
 	}
 
@@ -120,11 +130,50 @@ public class RouteTracker
 			return;
 		}
 
-		if (lastRouted == null || lastRouted.distanceTo2D(target) > RETARGET_DISTANCE
-			|| lastRouted.getPlane() != target.getPlane())
+		if (lastRouted == null)
 		{
 			lastRouted = target;
 			bridge.pathTo(target);
 		}
+		else if (lastRouted.distanceTo2D(target) > RETARGET_DISTANCE
+			|| lastRouted.getPlane() != target.getPlane())
+		{
+			// Retargeted once Shortest Path confirms the route on screen is still ours. Its
+			// answer comes back within a frame, so asking again on a later tick only happens
+			// if one was lost.
+			pendingRetarget = target;
+			bridge.requestTarget();
+		}
+	}
+
+	/**
+	 * Handles Shortest Path's answer about the route it is showing. If it is still ours, the
+	 * route moves to the member's latest position; if not, following stops and whatever the
+	 * player has on screen is left alone. Client thread.
+	 */
+	public void onPluginMessage(PluginMessage message)
+	{
+		WorldPoint routed = lastRouted;
+		WorldPoint next = pendingRetarget;
+		if (routed == null || next == null)
+		{
+			return;
+		}
+
+		Boolean ours = bridge.isPathingTo(message, routed);
+		if (ours == null)
+		{
+			return;
+		}
+
+		pendingRetarget = null;
+		if (!ours)
+		{
+			targetName = null;
+			lastRouted = null;
+			return;
+		}
+		lastRouted = next;
+		bridge.pathTo(next);
 	}
 }
