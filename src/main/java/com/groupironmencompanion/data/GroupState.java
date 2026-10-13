@@ -57,6 +57,9 @@ public class GroupState
 	 */
 	private volatile int generation;
 
+	/** Seconds after which a member's interaction no longer counts as current. */
+	private volatile int interactionStaleSeconds = 10;
+
 	public void addListener(Runnable listener)
 	{
 		listeners.add(listener);
@@ -86,6 +89,16 @@ public class GroupState
 		fromTime.set(EPOCH);
 		fromInstant.set(Instant.EPOCH);
 		fireChanged();
+	}
+
+	/**
+	 * Matches interaction staleness to the refresh rate. An interaction can only be as fresh
+	 * as the last poll, so at a slow refresh rate a fixed 10 seconds hid every one of them
+	 * the moment it arrived. Applies to interactions received from now on.
+	 */
+	public void setPollSeconds(int pollSeconds)
+	{
+		interactionStaleSeconds = Math.max(10, pollSeconds + 5);
 	}
 
 	public void setLocalPlayerName(String name)
@@ -374,7 +387,7 @@ public class GroupState
 		return changed;
 	}
 
-	private static GroupMember.Interaction toInteraction(MemberDto.InteractingDto dto)
+	private GroupMember.Interaction toInteraction(MemberDto.InteractingDto dto)
 	{
 		WorldPoint point = null;
 		if (dto.location != null)
@@ -383,7 +396,7 @@ public class GroupState
 		}
 		Instant seen = parseInstant(dto.last_updated);
 		return new GroupMember.Interaction(dto.name, dto.ratio, dto.scale, point,
-			seen != null ? seen : Instant.now());
+			seen != null ? seen : Instant.now(), interactionStaleSeconds);
 	}
 
 	/** Expands the server's flat [id, quantity, ...] encoding. */

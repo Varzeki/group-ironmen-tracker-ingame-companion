@@ -1,6 +1,7 @@
 package com.groupironmencompanion.data;
 
 import com.groupironmencompanion.api.MemberDto;
+import java.time.Instant;
 import java.util.List;
 import org.junit.Test;
 
@@ -152,6 +153,28 @@ public class GroupStateTest
 
 		state.applyUpdate(new MemberDto[]{updatedAt("alice", "2026-10-13T12:00:09Z")});
 		assertEquals("2026-10-13T12:00:09Z", state.getFromTime());
+	}
+
+	private static GroupMember.Interaction interactionSecondsAgo(GroupState state, long seconds)
+	{
+		MemberDto dto = member("alice", null);
+		dto.interacting = new MemberDto.InteractingDto();
+		dto.interacting.name = "Goblin";
+		dto.interacting.last_updated = Instant.now().minusSeconds(seconds).toString();
+		state.applyUpdate(new MemberDto[]{dto});
+		return state.getMember("alice").getInteraction();
+	}
+
+	@Test
+	public void interactionsStayCurrentForLongerAtSlowRefreshRates()
+	{
+		// At a 30 second refresh an interaction is often 20 seconds old when it arrives.
+		GroupState state = new GroupState();
+		assertTrue(interactionSecondsAgo(state, 20).isStale());
+
+		state.setPollSeconds(30);
+		assertFalse(interactionSecondsAgo(state, 20).isStale());
+		assertTrue(interactionSecondsAgo(state, 40).isStale());
 	}
 
 	@Test

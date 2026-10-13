@@ -400,14 +400,17 @@ public class GroupMember
 		private final int healthScale;
 		private final WorldPoint location;
 		private final Instant seen;
+		private final int staleAfterSeconds;
 
-		public Interaction(String name, int healthRatio, int healthScale, WorldPoint location, Instant seen)
+		public Interaction(String name, int healthRatio, int healthScale, WorldPoint location, Instant seen,
+			int staleAfterSeconds)
 		{
 			this.name = name;
 			this.healthRatio = healthRatio;
 			this.healthScale = healthScale;
 			this.location = location;
 			this.seen = seen;
+			this.staleAfterSeconds = staleAfterSeconds;
 		}
 
 		public String getName()
@@ -437,7 +440,7 @@ public class GroupMember
 
 		public boolean isStale()
 		{
-			return seen == null || Duration.between(seen, Instant.now()).getSeconds() > 10;
+			return seen == null || Duration.between(seen, Instant.now()).getSeconds() > staleAfterSeconds;
 		}
 	}
 }

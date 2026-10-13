@@ -196,6 +196,7 @@ public class GroupIronmenCompanionPlugin extends Plugin
 	protected void startUp()
 	{
 		applyPalette();
+		groupState.setPollSeconds(config.pollSeconds());
 		groupState.addListener(stateListener);
 
 		overlayManager.add(bankOverlay);
@@ -472,6 +473,10 @@ public class GroupIronmenCompanionPlugin extends Plugin
 			case "groupToken":
 			case "baseUrlOverride":
 				resetConnection();
+				break;
+
+			case "pollSeconds":
+				groupState.setPollSeconds(config.pollSeconds());
 				break;
 
 			case "showSidePanel":
