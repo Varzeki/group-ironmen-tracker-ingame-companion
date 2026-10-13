@@ -1,16 +1,23 @@
 package com.groupironmencompanion.bank;
 
+import com.groupironmencompanion.GroupIronmenCompanionConfig;
+import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.Shape;
 import java.awt.image.BufferedImage;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import net.runelite.api.Client;
 import net.runelite.api.IndexDataBase;
 import net.runelite.api.SpritePixels;
+import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.widgets.Widget;
 
 /**
  * The game's own interface sprites, so the group bank can be drawn in the real bank's chrome.
@@ -19,6 +26,12 @@ import net.runelite.api.SpritePixels;
  * client's sprite overrides first, then the game cache. Overrides are how RuneLite's Interface
  * Styles and the Resource Packs plugin reskin interfaces, so going through them keeps this
  * window matching the bank beside it. The overrides map is only ever read, never written.
+ * <p>
+ * Themes change while the game runs. Resource Packs applies its sprites late, after an
+ * async download and again on login, and gives no event anyone else can hear, so
+ * {@link #refresh()} compares the override behind every cached sprite with the one now in
+ * place and starts again on any difference. The bank's separator colour is read from the
+ * live bank the same way, since a colour pack recolours those lines rather than a sprite.
  * <p>
  * Every sprite keeps the offsets and maximum size it was authored with. The game positions a
  * sprite by its maximum box and draws the trimmed pixels at an offset inside it, and tiles by
@@ -33,14 +46,37 @@ public class GameSprites
 	/** How long to wait before asking again for a sprite the cache could not provide. */
 	private static final long MISSING_RETRY_MILLIS = 2000;
 
+	/**
+	 * Config groups whose changes can reskin interfaces: Resource Packs, Interface Styles,
+	 * and RuneLite's own, which holds every plugin's on/off switch.
+	 */
+	private static final Set<String> THEME_GROUPS = new HashSet<>(Arrays.asList(
+		"resourcepacks", "interfaceStyles", "runelite"));
+
 	@Inject
 	private Client client;
+
+	@Inject
+	private GroupIronmenCompanionConfig config;
 
 	private final Map<Integer, Sprite> sprites = new HashMap<>();
 	private final Map<Integer, Long> missing = new HashMap<>();
 
 	/** Bumped whenever cached sprites are thrown away, so composed images can be rebuilt. */
 	private int version;
+
+	/** Set from any thread when a theme setting changes; acted on by the next refresh. */
+	private volatile boolean invalidated;
+
+	/** Whether the cached sprites were loaded with overrides honoured. */
+	private boolean themed = true;
+
+	/** The client tick of the last refresh, so it only runs once however many overlays ask. */
+	private int refreshedCycle = -1;
+
+	/** The bank's separator colour, as last seen on the bank itself. */
+	private int lineRgb = BankStyle.SEPARATOR.getRGB() & 0xFFFFFF;
+	private Color lineColour = BankStyle.SEPARATOR;
 
 	/** A loaded sprite: its trimmed pixels plus the box they are placed in. */
 	static final class Sprite
@@ -51,8 +87,13 @@ public class GameSprites
 		final int maxWidth;
 		final int maxHeight;
 
-		private Sprite(SpritePixels pixels)
+		/** The override it was drawn from, or null if it came from the cache. */
+		@Nullable
+		final SpritePixels override;
+
+		private Sprite(SpritePixels pixels, @Nullable SpritePixels override)
 		{
+			this.override = override;
 			image = pixels.toBufferedImage();
 			offsetX = Math.max(0, pixels.getOffsetX());
 			offsetY = Math.max(0, pixels.getOffsetY());
@@ -80,7 +121,8 @@ public class GameSprites
 			return null;
 		}
 
-		SpritePixels pixels = load(id);
+		SpritePixels override = themed ? overrideFor(id) : null;
+		SpritePixels pixels = override != null ? override : fromCache(id);
 		if (pixels == null || pixels.getWidth() <= 0 || pixels.getHeight() <= 0)
 		{
 			missing.put(id, now);
@@ -88,21 +130,22 @@ public class GameSprites
 		}
 
 		missing.remove(id);
-		sprite = new Sprite(pixels);
+		sprite = new Sprite(pixels, override);
 		sprites.put(id, sprite);
 		return sprite;
 	}
 
+	/** The override in place for a sprite, if any. Only ever read from the client's map. */
 	@Nullable
-	private SpritePixels load(int id)
+	private SpritePixels overrideFor(int id)
 	{
 		Map<Integer, SpritePixels> overrides = client.getSpriteOverrides();
-		SpritePixels override = overrides == null ? null : overrides.get(id);
-		if (override != null)
-		{
-			return override;
-		}
+		return overrides == null ? null : overrides.get(id);
+	}
 
+	@Nullable
+	private SpritePixels fromCache(int id)
+	{
 		IndexDataBase index = client.getIndexSprites();
 		if (index == null)
 		{
@@ -137,6 +180,94 @@ public class GameSprites
 		sprites.clear();
 		missing.clear();
 		version++;
+	}
+
+	// ------------------------------------------------------------------
+	// Following the theme
+	// ------------------------------------------------------------------
+
+	/**
+	 * Brings the cache up to date with the current theme. Call at the start of every render
+	 * that uses these sprites; the work is done at most once per client tick.
+	 * <p>
+	 * The check is an identity comparison per cached sprite, a few dozen map lookups, which
+	 * is cheap enough to do continuously and is the only way to notice a pack being applied.
+	 */
+	void refresh()
+	{
+		int cycle = client.getGameCycle();
+		if (cycle == refreshedCycle)
+		{
+			return;
+		}
+		refreshedCycle = cycle;
+
+		boolean followTheme = config.matchInterfaceTheme();
+		if (invalidated || followTheme != themed || (followTheme && overridesChanged()))
+		{
+			invalidated = false;
+			themed = followTheme;
+			clear();
+		}
+
+		readLineColour(followTheme);
+	}
+
+	private boolean overridesChanged()
+	{
+		Map<Integer, SpritePixels> overrides = client.getSpriteOverrides();
+		for (Map.Entry<Integer, Sprite> entry : sprites.entrySet())
+		{
+			SpritePixels current = overrides == null ? null : overrides.get(entry.getKey());
+			if (current != entry.getValue().override)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Takes the separator colour from the bank's own line under its tabs while the bank is
+	 * open, and keeps the last one seen for while it is not. A colour pack recolours these
+	 * lines directly, so this is the only place its colour can be found.
+	 */
+	private void readLineColour(boolean followTheme)
+	{
+		int rgb = BankStyle.SEPARATOR.getRGB() & 0xFFFFFF;
+		if (followTheme)
+		{
+			Widget line = client.getWidget(InterfaceID.Bankmain.TABS_LINE0);
+			if (line == null || line.isHidden())
+			{
+				return;
+			}
+			rgb = line.getTextColor() & 0xFFFFFF;
+		}
+
+		if (rgb != lineRgb)
+		{
+			lineRgb = rgb;
+			lineColour = new Color(rgb);
+		}
+	}
+
+	/** The colour for separator lines, matching the bank's. */
+	Color getLineColour()
+	{
+		return lineColour;
+	}
+
+	/**
+	 * Notes a config change that might have reskinned the interface, so the next refresh
+	 * reloads everything. Safe to call from any thread.
+	 */
+	public void onConfigChanged(String group)
+	{
+		if (THEME_GROUPS.contains(group))
+		{
+			invalidated = true;
+		}
 	}
 
 	// ------------------------------------------------------------------

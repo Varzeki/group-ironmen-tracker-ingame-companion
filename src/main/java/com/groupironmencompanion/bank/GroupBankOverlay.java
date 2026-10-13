@@ -3,6 +3,7 @@ package com.groupironmencompanion.bank;
 import com.groupironmencompanion.GroupIronmenCompanionConfig;
 import com.groupironmencompanion.data.GroupMember;
 import com.groupironmencompanion.data.GroupState;
+import com.groupironmencompanion.overlay.PanelBackground;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -178,7 +179,10 @@ public class GroupBankOverlay extends Overlay
 
 	private static final BasicStroke BORDER_STROKE = new BasicStroke(1f);
 
-	/** Matches the skills hover panel, which is dark enough to stay readable over the bank. */
+	/**
+	 * Matches the skills hover panel, which is dark enough to stay readable over the bank.
+	 * Used as is when not matching the interface theme, and as the minimum opacity when it is.
+	 */
 	private static final Color TOOLTIP_BACKGROUND = new Color(22, 19, 15, 235);
 
 	/** Height for a window whose tab strip is this tall. */
@@ -211,6 +215,9 @@ public class GroupBankOverlay extends Overlay
 
 	@Inject
 	private GameSprites sprites;
+
+	@Inject
+	private PanelBackground panelBackground;
 
 	/**
 	 * The frame composed into one image, since it is a few hundred sprite draws and only
@@ -280,6 +287,7 @@ public class GroupBankOverlay extends Overlay
 
 		frameTabs = new ArrayList<>();
 		GameText.prepare(graphics);
+		sprites.refresh();
 
 		// Tabs are laid out before anything is drawn, because how many rows they need
 		// decides how tall the window is.
@@ -499,7 +507,7 @@ public class GroupBankOverlay extends Overlay
 
 		// The line closing off the strip, as the bank draws under its own tabs.
 		int bottom = top + tabLayout.height;
-		graphics.setColor(BankStyle.SEPARATOR);
+		graphics.setColor(sprites.getLineColour());
 		graphics.drawLine(FRAME_EDGE, bottom - 1, WIDTH - FRAME_EDGE - 1, bottom - 1);
 		return bottom;
 	}
@@ -713,7 +721,7 @@ public class GroupBankOverlay extends Overlay
 			{
 				graphics.setFont(GameText.REGULAR);
 				GameText.drawShadowed(graphics, row.getHeader(), area.x + 2, y + 15, GameText.ORANGE);
-				graphics.setColor(BankStyle.SEPARATOR);
+				graphics.setColor(sprites.getLineColour());
 				graphics.drawLine(area.x + 2, y + 19, area.x + area.width - 4, y + 19);
 				y += CELL_HEIGHT;
 				continue;
@@ -862,7 +870,7 @@ public class GroupBankOverlay extends Overlay
 
 		PanelComponent panel = new PanelComponent();
 		panel.setPreferredSize(new Dimension(190, 0));
-		panel.setBackgroundColor(TOOLTIP_BACKGROUND);
+		panel.setBackgroundColor(panelBackground.get(TOOLTIP_BACKGROUND));
 		panel.getChildren().add(TitleComponent.builder().text(name).color(Color.WHITE).build());
 
 		panel.getChildren().add(LineComponent.builder()

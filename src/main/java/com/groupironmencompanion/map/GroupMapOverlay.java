@@ -3,6 +3,7 @@ package com.groupironmencompanion.map;
 import com.groupironmencompanion.GroupIronmenCompanionConfig;
 import com.groupironmencompanion.data.GroupMember;
 import com.groupironmencompanion.data.GroupState;
+import com.groupironmencompanion.overlay.PanelBackground;
 import com.groupironmencompanion.route.RouteTracker;
 import java.awt.BasicStroke;
 import java.awt.Color;
@@ -84,6 +85,9 @@ public class GroupMapOverlay extends Overlay
 	@Inject
 	private RuneLiteConfig runeLiteConfig;
 
+	@Inject
+	private PanelBackground panelBackground;
+
 	/** Rows of the last drawn frame, published for the AWT-side input handler. */
 	private volatile List<Row> rows = Collections.emptyList();
 
@@ -157,7 +161,7 @@ public class GroupMapOverlay extends Overlay
 		int x = map.x + MARGIN;
 		int y = map.y + MARGIN;
 
-		graphics.setColor(BACKGROUND);
+		graphics.setColor(panelBackground.get(BACKGROUND));
 		graphics.fillRect(x, y, WIDTH, height);
 		graphics.setColor(BORDER);
 		graphics.setStroke(BORDER_STROKE);

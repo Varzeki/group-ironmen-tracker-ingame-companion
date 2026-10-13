@@ -44,7 +44,10 @@ public class SkillHoverOverlay extends Overlay
 	private static final NumberFormat NUMBERS = NumberFormat.getIntegerInstance(Locale.ENGLISH);
 	private static final Color DIM = new Color(0xB0, 0xB0, 0xB0);
 
-	/** Nearly opaque so the panel stays legible over the game world behind it. */
+	/**
+	 * Nearly opaque so the panel stays legible over the game world behind it. Used as is when
+	 * not matching the interface theme, and as the minimum opacity when it is.
+	 */
 	private static final Color BACKGROUND = new Color(22, 19, 15, 235);
 
 	private static final int PANEL_WIDTH = 200;
@@ -66,6 +69,9 @@ public class SkillHoverOverlay extends Overlay
 
 	@Inject
 	private RuneLiteConfig runeLiteConfig;
+
+	@Inject
+	private PanelBackground panelBackground;
 
 	@Inject
 	public SkillHoverOverlay()
@@ -205,7 +211,7 @@ public class SkillHoverOverlay extends Overlay
 
 		PanelComponent panel = new PanelComponent();
 		panel.setPreferredSize(new Dimension(width, 0));
-		panel.setBackgroundColor(BACKGROUND);
+		panel.setBackgroundColor(panelBackground.get(BACKGROUND));
 		panel.getChildren().add(TitleComponent.builder()
 			.text(hovered.getDisplayName())
 			.color(Color.WHITE)

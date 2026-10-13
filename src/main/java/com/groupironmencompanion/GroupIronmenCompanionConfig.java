@@ -293,6 +293,21 @@ public interface GroupIronmenCompanionConfig extends Config
 		return true;
 	}
 
+	@ConfigItem(
+		keyName = "matchInterfaceTheme",
+		name = "Match interface theme",
+		description = "Follow interface reskins: the group bank uses any sprites Resource Packs or "
+			+ "Interface Styles put in place of the bank's, and its lines take the bank's colours. "
+			+ "The map list, skills panel and item tooltips use RuneLite's overlay colour. "
+			+ "Turn off for the plain game look whatever is installed.",
+		position = 7,
+		section = bankSection
+	)
+	default boolean matchInterfaceTheme()
+	{
+		return true;
+	}
+
 	// ------------------------------------------------------------------
 	// Skills tab
 	// ------------------------------------------------------------------

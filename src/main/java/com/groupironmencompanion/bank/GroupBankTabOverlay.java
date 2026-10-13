@@ -105,6 +105,7 @@ public class GroupBankTabOverlay extends Overlay
 
 		Rectangle tab = place(bankBounds);
 		hit = tab;
+		sprites.refresh();
 
 		Point mouse = client.getMouseCanvasPosition();
 		boolean hovered = mouse != null && tab.contains(mouse.getX(), mouse.getY());
