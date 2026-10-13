@@ -25,6 +25,8 @@ import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.worldmap.WorldMap;
 import net.runelite.api.worldmap.WorldMapData;
 import net.runelite.api.widgets.Widget;
+import net.runelite.client.config.RuneLiteConfig;
+import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
@@ -47,15 +49,22 @@ public class GroupMapOverlay extends Overlay
 	private static final Color HOVER = new Color(255, 255, 255, 38);
 	private static final Color ROUTING = new Color(0x55, 0xC5, 0x5A);
 
-	private static final Font FONT = new Font(Font.SANS_SERIF, Font.PLAIN, 12);
-	private static final Font TITLE_FONT = new Font(Font.SANS_SERIF, Font.BOLD, 12);
+	/**
+	 * The hint line is secondary, so it uses the small font whatever the interface font is.
+	 * This replaces a 9pt system font that was hard to read and looked nothing like the
+	 * rest of the client.
+	 */
+	private static final Font HINT_FONT = FontManager.getRunescapeSmallFont();
+
+	private static final BasicStroke BORDER_STROKE = new BasicStroke(1f);
 
 	private static final int WIDTH = 150;
-	private static final int ROW_HEIGHT = 16;
 	private static final int PADDING = 6;
-	private static final int TITLE_HEIGHT = 18;
-	private static final int HINT_HEIGHT = 13;
 	private static final int MARGIN = 8;
+
+	/** Extra space added to the font's own line height, for the rows and the title. */
+	private static final int ROW_SPACING = 2;
+	private static final int TITLE_SPACING = 4;
 
 	@Inject
 	private Client client;
@@ -71,6 +80,9 @@ public class GroupMapOverlay extends Overlay
 
 	@Inject
 	private GroupMapMarkers markers;
+
+	@Inject
+	private RuneLiteConfig runeLiteConfig;
 
 	/** Rows of the last drawn frame, published for the AWT-side input handler. */
 	private volatile List<Row> rows = Collections.emptyList();
@@ -129,32 +141,39 @@ public class GroupMapOverlay extends Overlay
 			return null;
 		}
 
+		// The list is a RuneLite panel rather than a game interface, so it uses RuneLite's
+		// interface font, the one the user picked for overlay panels, and sizes its rows to it.
+		Font font = runeLiteConfig.interfaceFont().getFont();
+		graphics.setFont(font);
+		FontMetrics metrics = graphics.getFontMetrics();
+		FontMetrics hintMetrics = graphics.getFontMetrics(HINT_FONT);
+		int rowHeight = metrics.getHeight() + ROW_SPACING;
+		int titleHeight = metrics.getHeight() + TITLE_SPACING;
+		int hintHeight = hintMetrics.getHeight();
+
 		boolean routing = config.mapPanelRouting();
-		int height = TITLE_HEIGHT + members.size() * ROW_HEIGHT + PADDING
-			+ (routing ? HINT_HEIGHT : 0);
+		int height = titleHeight + members.size() * rowHeight + PADDING
+			+ (routing ? hintHeight : 0);
 		int x = map.x + MARGIN;
 		int y = map.y + MARGIN;
 
 		graphics.setColor(BACKGROUND);
 		graphics.fillRect(x, y, WIDTH, height);
 		graphics.setColor(BORDER);
-		graphics.setStroke(new BasicStroke(1f));
+		graphics.setStroke(BORDER_STROKE);
 		graphics.drawRect(x, y, WIDTH - 1, height - 1);
 
-		graphics.setFont(TITLE_FONT);
-		graphics.setColor(TEXT_DIM);
-		graphics.drawString("Group", x + PADDING, y + 13);
+		drawShadowed(graphics, "Group", x + PADDING,
+			y + (titleHeight - metrics.getHeight()) / 2 + metrics.getAscent(), TEXT_DIM);
 
 		Point mouse = client.getMouseCanvasPosition();
 		List<Row> drawn = new ArrayList<>(members.size());
 
-		graphics.setFont(FONT);
-		FontMetrics metrics = graphics.getFontMetrics();
-		int rowY = y + TITLE_HEIGHT;
+		int rowY = y + titleHeight;
 
 		for (GroupMember member : members)
 		{
-			Rectangle bounds = new Rectangle(x + 1, rowY, WIDTH - 2, ROW_HEIGHT);
+			Rectangle bounds = new Rectangle(x + 1, rowY, WIDTH - 2, rowHeight);
 			boolean hovered = mouse != null && bounds.contains(mouse.getX(), mouse.getY());
 
 			if (hovered)
@@ -167,22 +186,22 @@ public class GroupMapOverlay extends Overlay
 			if (isTarget)
 			{
 				graphics.setColor(ROUTING);
-				graphics.fillRect(bounds.x, bounds.y + 3, 3, ROW_HEIGHT - 6);
+				graphics.fillRect(bounds.x, bounds.y + 3, 3, rowHeight - 6);
 			}
 
-			graphics.setColor(member.getColour());
-			graphics.drawString(abbreviate(member.getName(), metrics, WIDTH - PADDING * 2 - 10),
-				x + PADDING + 4, rowY + 12);
+			drawShadowed(graphics, abbreviate(member.getName(), metrics, WIDTH - PADDING * 2 - 10),
+				x + PADDING + 4, rowY + (rowHeight - metrics.getHeight()) / 2 + metrics.getAscent(),
+				member.getColour());
 
 			drawn.add(new Row(member.getName(), bounds));
-			rowY += ROW_HEIGHT;
+			rowY += rowHeight;
 		}
 
 		if (routing)
 		{
-			graphics.setFont(FONT.deriveFont(9f));
-			graphics.setColor(TEXT_DIM);
-			graphics.drawString("click: jump  ·  right: route", x + PADDING, rowY + 9);
+			graphics.setFont(HINT_FONT);
+			drawShadowed(graphics, "click: jump  ·  right: route", x + PADDING,
+				rowY + hintMetrics.getAscent(), TEXT_DIM);
 		}
 
 		rows = Collections.unmodifiableList(drawn);
@@ -301,6 +320,19 @@ public class GroupMapOverlay extends Overlay
 		return bounds == null || bounds.width <= 0 ? null : bounds;
 	}
 
+	/** Text with the 1px shadow RuneLite's own panels give their text. */
+	private static void drawShadowed(Graphics2D graphics, String text, int x, int y, Color colour)
+	{
+		graphics.setColor(Color.BLACK);
+		graphics.drawString(text, x + 1, y + 1);
+		graphics.setColor(colour);
+		graphics.drawString(text, x, y);
+	}
+
+	/**
+	 * Shortens text to fit, ending it with three dots, since the RuneScape fonts have no
+	 * single ellipsis character.
+	 */
 	private static String abbreviate(String text, FontMetrics metrics, int maxWidth)
 	{
 		if (metrics.stringWidth(text) <= maxWidth)
@@ -308,11 +340,11 @@ public class GroupMapOverlay extends Overlay
 			return text;
 		}
 		String result = text;
-		while (result.length() > 1 && metrics.stringWidth(result + "…") > maxWidth)
+		while (result.length() > 1 && metrics.stringWidth(result + "...") > maxWidth)
 		{
 			result = result.substring(0, result.length() - 1);
 		}
-		return result + "…";
+		return result + "...";
 	}
 
 	/** One drawn row, in canvas coordinates. */

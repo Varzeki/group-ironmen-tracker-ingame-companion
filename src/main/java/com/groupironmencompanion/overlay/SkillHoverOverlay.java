@@ -18,6 +18,7 @@ import javax.inject.Singleton;
 import net.runelite.api.Client;
 import net.runelite.api.Experience;
 import net.runelite.api.widgets.Widget;
+import net.runelite.client.config.RuneLiteConfig;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
@@ -64,6 +65,9 @@ public class SkillHoverOverlay extends Overlay
 	private GroupIronmenCompanionConfig config;
 
 	@Inject
+	private RuneLiteConfig runeLiteConfig;
+
+	@Inject
 	public SkillHoverOverlay()
 	{
 		setPosition(OverlayPosition.DYNAMIC);
@@ -89,6 +93,11 @@ public class SkillHoverOverlay extends Overlay
 		}
 
 		Placement placement = choosePlacement(grid);
+
+		// A RuneLite panel, not a game interface, so it uses RuneLite's interface font: the
+		// one the user picked for overlay panels. Being a dynamic overlay it would otherwise
+		// get the font meant for text drawn over the game world.
+		graphics.setFont(runeLiteConfig.interfaceFont().getFont());
 
 		PanelComponent panel = buildPanel(hovered, placement.width);
 		if (panel == null)
