@@ -51,8 +51,11 @@ public class GroupBankTabOverlay extends Overlay
 	@Inject
 	private GroupIronmenCompanionConfig config;
 
-	/** Where the tab was last drawn, in canvas coordinates, or null when it is not shown. */
-	private Rectangle hit;
+	/**
+	 * Where the tab was last drawn, in canvas coordinates, or null when it is not shown.
+	 * Written while drawing and read by the mouse handler on AWT.
+	 */
+	private volatile Rectangle hit;
 
 	@Inject
 	public GroupBankTabOverlay()

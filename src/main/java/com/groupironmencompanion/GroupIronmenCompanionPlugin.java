@@ -151,7 +151,8 @@ public class GroupIronmenCompanionPlugin extends Plugin
 	@Inject
 	private GroupStatusOverlay statusOverlay;
 
-	private GroupPanel panel;
+	/** Swapped on config changes and read from the polling thread, so it must be volatile. */
+	private volatile GroupPanel panel;
 	private NavigationButton navButton;
 
 	/**

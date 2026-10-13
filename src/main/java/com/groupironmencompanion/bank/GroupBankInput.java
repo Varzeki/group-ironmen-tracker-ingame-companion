@@ -84,7 +84,7 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 			}
 			else
 			{
-				viewer.setOpen(false);
+				closeAll();
 			}
 			event.consume();
 			return event;
@@ -108,7 +108,8 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 		if (hits.scrollbar.contains(point))
 		{
 			draggingScrollbar = true;
-			viewer.setScrollRow(overlay.scrollRowForY(point.y));
+			int row = overlay.scrollRowForY(point.y);
+			clientThread.invoke(() -> viewer.setScrollRow(row));
 			event.consume();
 			return event;
 		}
@@ -128,8 +129,11 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 		{
 			if (hit.bounds.contains(point))
 			{
-				viewer.setActiveTab(hit.tab);
-				clientThread.invoke(this::closeSearch);
+				clientThread.invoke(() ->
+				{
+					viewer.setActiveTab(hit.tab);
+					closeSearch();
+				});
 				event.consume();
 				return event;
 			}
@@ -181,7 +185,8 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 
 		// Track the pointer even once it leaves the bar, which is how scrollbars behave
 		// everywhere else; the row is clamped, so dragging past either end just pins it.
-		viewer.setScrollRow(overlay.scrollRowForY(event.getY()));
+		int row = overlay.scrollRowForY(event.getY());
+		clientThread.invoke(() -> viewer.setScrollRow(row));
 		event.consume();
 		return event;
 	}
@@ -210,10 +215,13 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 			return event;
 		}
 
-		int rows = Math.max(1, viewer.getRows().size());
-		int maxScroll = Math.max(0, rows - GroupBankOverlay.VISIBLE_ROWS);
-		int next = viewer.getScrollRow() + (event.getWheelRotation() > 0 ? SCROLL_ROWS : -SCROLL_ROWS);
-		viewer.setScrollRow(Math.max(0, Math.min(maxScroll, next)));
+		int step = event.getWheelRotation() > 0 ? SCROLL_ROWS : -SCROLL_ROWS;
+		clientThread.invoke(() ->
+		{
+			int rows = Math.max(1, viewer.getRows().size());
+			int maxScroll = Math.max(0, rows - GroupBankOverlay.VISIBLE_ROWS);
+			viewer.setScrollRow(Math.max(0, Math.min(maxScroll, viewer.getScrollRow() + step)));
+		});
 
 		event.consume();
 		return event;
@@ -265,18 +273,6 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 	// ------------------------------------------------------------------
 
 	/**
-	 * Opens the window, placing it only if the user has never moved it.
-	 * <p>
-	 * The window is opened first and unconditionally, because this is called from the AWT
-	 * thread (the hotkey and the Group tab) as well as from game events. Working out where to
-	 * put it means reading the bank widget, which is only legal on the client thread, so that
-	 * part hops threads. Doing it inline was why the hotkey and the tab appeared to do
-	 * nothing: the client call threw before the window was ever opened.
-	 * <p>
-	 * A remembered position always wins. RuneLite persists it when you alt-drag the overlay
-	 * and restores it on startup, so re-docking on every open would throw that away.
-	 */
-	/**
 	 * Closes the window and any search prompt with it. Safe to call from any thread, so the
 	 * hotkey and the game events that dismiss the window can share one path.
 	 */
@@ -289,20 +285,29 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 		});
 	}
 
+	/**
+	 * Opens the window, placing it only if the user has never moved it.
+	 * <p>
+	 * This is called from the AWT thread (the hotkey and the Group tab) as well as from game
+	 * events, so all of it hops to the client thread. The viewer's state is only changed
+	 * there, where it is drawn from, and working out where to put the window means reading
+	 * the bank widget, which is only legal there. Doing that inline was why the hotkey and
+	 * the tab once appeared to do nothing: the client call threw before the window opened.
+	 * <p>
+	 * A remembered position always wins. RuneLite persists it when you alt-drag the overlay
+	 * and restores it on startup, so re-docking on every open would throw that away.
+	 */
 	public void openBesideBank()
 	{
-		viewer.setOpen(true);
-
-		if (overlay.getPreferredLocation() == null)
+		clientThread.invoke(() ->
 		{
-			clientThread.invoke(() ->
+			viewer.setOpen(true);
+
+			if (overlay.getPreferredLocation() == null)
 			{
-				if (overlay.getPreferredLocation() == null)
-				{
-					overlay.setPreferredLocation(tabOverlay.defaultLocation(
-						GroupBankOverlay.WIDTH, overlay.getWindowSize().height));
-				}
-			});
-		}
+				overlay.setPreferredLocation(tabOverlay.defaultLocation(
+					GroupBankOverlay.WIDTH, overlay.getWindowSize().height));
+			}
+		});
 	}
 }
