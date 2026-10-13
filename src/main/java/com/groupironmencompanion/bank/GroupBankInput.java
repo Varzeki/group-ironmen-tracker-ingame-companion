@@ -50,6 +50,14 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 	/** Set while the scrollbar is being dragged, so movement keeps scrolling after the press. */
 	private boolean draggingScrollbar;
 
+	/**
+	 * The mouse buttons whose press this window swallowed, one bit per button. A release or
+	 * click is only swallowed when its press was: one that began on the game, such as the end
+	 * of a middle-button camera drag, must reach the game wherever it lands, or the game never
+	 * hears the button come up and keeps turning the camera.
+	 */
+	private int swallowedButtons;
+
 	/** The search prompt this window opened, so closing it never closes anyone else's. */
 	private ChatboxTextInput searchInput;
 
@@ -86,7 +94,7 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 			{
 				closeAll();
 			}
-			event.consume();
+			swallow(event);
 			return event;
 		}
 
@@ -110,7 +118,7 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 			draggingScrollbar = true;
 			int row = overlay.scrollRowForY(point.y);
 			clientThread.invoke(() -> viewer.setScrollRow(row));
-			event.consume();
+			swallow(event);
 			return event;
 		}
 
@@ -121,7 +129,7 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 				closeSearch();
 				viewer.setOpen(false);
 			});
-			event.consume();
+			swallow(event);
 			return event;
 		}
 
@@ -134,7 +142,7 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 					viewer.setActiveTab(hit.tab);
 					closeSearch();
 				});
-				event.consume();
+				swallow(event);
 				return event;
 			}
 		}
@@ -153,21 +161,30 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 		});
 
 		// Swallow anything else inside the window so clicks do not fall through to the game.
-		event.consume();
+		swallow(event);
 		return event;
 	}
 
 	@Override
 	public MouseEvent mouseClicked(MouseEvent event)
 	{
-		return swallowInsideWindow(event);
+		if (isSwallowed(event))
+		{
+			event.consume();
+		}
+		return event;
 	}
 
 	@Override
 	public MouseEvent mouseReleased(MouseEvent event)
 	{
 		draggingScrollbar = false;
-		return swallowInsideWindow(event);
+		if (isSwallowed(event))
+		{
+			swallowedButtons &= ~buttonBit(event);
+			event.consume();
+		}
+		return event;
 	}
 
 	@Override
@@ -191,14 +208,21 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 		return event;
 	}
 
-	private MouseEvent swallowInsideWindow(MouseEvent event)
+	/** Swallows a press, remembering its button so the matching release is swallowed too. */
+	private void swallow(MouseEvent event)
 	{
-		if (config.bankViewer() && viewer.isOpen() && !event.isAltDown() && inputState.isLoggedIn()
-			&& !inputState.isMenuOpen() && overlay.getHits().window.contains(event.getPoint()))
-		{
-			event.consume();
-		}
-		return event;
+		swallowedButtons |= buttonBit(event);
+		event.consume();
+	}
+
+	private boolean isSwallowed(MouseEvent event)
+	{
+		return (swallowedButtons & buttonBit(event)) != 0;
+	}
+
+	private static int buttonBit(MouseEvent event)
+	{
+		return 1 << Math.max(0, Math.min(event.getButton(), 30));
 	}
 
 	@Override
