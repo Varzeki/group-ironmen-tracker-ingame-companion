@@ -207,6 +207,40 @@ public class GameSprites
 		graphics.setClip(clip);
 	}
 
+	/**
+	 * Draws a box from eight pieces: four corners, and four edges tiled between them. The
+	 * middle is left alone, so the caller fills it first.
+	 */
+	void drawNineSlice(Graphics2D graphics, int topLeft, int top, int topRight, int left, int right,
+		int bottomLeft, int bottom, int bottomRight, int x, int y, int width, int height)
+	{
+		int topLeftWidth = widthOf(topLeft, 0);
+		int topLeftHeight = heightOf(topLeft, 0);
+		int topRightWidth = widthOf(topRight, 0);
+		int topRightHeight = heightOf(topRight, 0);
+		int bottomLeftWidth = widthOf(bottomLeft, 0);
+		int bottomLeftHeight = heightOf(bottomLeft, 0);
+		int bottomRightWidth = widthOf(bottomRight, 0);
+		int bottomRightHeight = heightOf(bottomRight, 0);
+
+		int topHeight = heightOf(top, 0);
+		int bottomHeight = heightOf(bottom, 0);
+		int leftWidth = widthOf(left, 0);
+		int rightWidth = widthOf(right, 0);
+
+		tile(graphics, top, x + topLeftWidth, y, width - topLeftWidth - topRightWidth, topHeight);
+		tile(graphics, bottom, x + bottomLeftWidth, y + height - bottomHeight,
+			width - bottomLeftWidth - bottomRightWidth, bottomHeight);
+		tile(graphics, left, x, y + topLeftHeight, leftWidth, height - topLeftHeight - bottomLeftHeight);
+		tile(graphics, right, x + width - rightWidth, y + topRightHeight,
+			rightWidth, height - topRightHeight - bottomRightHeight);
+
+		draw(graphics, topLeft, x, y);
+		draw(graphics, topRight, x + width - topRightWidth, y);
+		draw(graphics, bottomLeft, x, y + height - bottomLeftHeight);
+		draw(graphics, bottomRight, x + width - bottomRightWidth, y + height - bottomRightHeight);
+	}
+
 	/** The width of a sprite's box, or the fallback when it is missing. */
 	int widthOf(int id, int fallback)
 	{

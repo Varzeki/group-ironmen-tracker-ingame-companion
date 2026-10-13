@@ -104,6 +104,13 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 			return event;
 		}
 
+		if (hits.scrollUp.contains(point) || hits.scrollDown.contains(point))
+		{
+			scrollBy(hits.scrollUp.contains(point) ? -1 : 1);
+			event.consume();
+			return event;
+		}
+
 		if (hits.close.contains(point))
 		{
 			clientThread.invoke(() ->
@@ -206,6 +213,13 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 
 		event.consume();
 		return event;
+	}
+
+	/** Scrolls by whole rows, as the scrollbar's arrows do in the bank. */
+	private void scrollBy(int rows)
+	{
+		int maxScroll = Math.max(0, viewer.getRows().size() - GroupBankOverlay.VISIBLE_ROWS);
+		viewer.setScrollRow(Math.max(0, Math.min(maxScroll, viewer.getScrollRow() + rows)));
 	}
 
 	// ------------------------------------------------------------------

@@ -9,8 +9,10 @@ import java.awt.Dimension;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
+import java.awt.Shape;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import javax.inject.Inject;
@@ -36,6 +38,10 @@ import net.runelite.client.ui.overlay.tooltip.TooltipManager;
  * cannot move items: there is no withdraw, deposit, or any other action on anything shown,
  * because the plugin only ever has item ids and quantities read back from your group's
  * server.
+ * <p>
+ * It is drawn from the bank's own sprites, laid out the way the bank lays them out, so it
+ * reads as a sibling of the bank beside it. Every control also has a flat fallback with the
+ * same geometry, used if the sprites cannot be loaded.
  */
 @Singleton
 public class GroupBankOverlay extends Overlay
@@ -89,35 +95,79 @@ public class GroupBankOverlay extends Overlay
 
 	/** Space between the window's outer edge and the content, on the left and right. */
 	private static final int PADDING = 8;
-	private static final int TAB_HEIGHT = 20;
-	private static final int SEARCH_HEIGHT = 20;
+
+	// The tab strip. "All" and "Group Storage" are the bank's own 41x40 tab tiles with an
+	// icon; member tabs carry a name, so they are the game's short text tabs, which stretch.
+
+	/** A bank tab tile, and the space left between neighbouring tiles. */
+	private static final int TILE_WIDTH = 41;
+	private static final int TILE_HEIGHT = 40;
+	private static final int TILE_GAP = 0;
+
+	/** Space between the two tiles and the first member tab. */
+	private static final int MEMBER_TABS_GAP = 4;
+
+	/** A member tab's height (the sprite's own), its text padding and its widest label. */
+	private static final int MEMBER_TAB_HEIGHT = 21;
+	private static final int MEMBER_TAB_PADDING = 8;
+	private static final int MEMBER_TAB_GAP = 1;
+	private static final int MEMBER_LABEL_MAX_WIDTH = 96;
+
+	/** The end piece of a member tab, used only if its sprite somehow reports no width. */
+	private static final int MEMBER_TAB_CAP = 20;
+
+	/** The search box below the tab strip, and the gap either side of it. */
+	private static final int SEARCH_GAP = 3;
+	private static final int SEARCH_HEIGHT = 22;
+	private static final int SEARCH_TEXT_X = 7;
+
+	/** Space between the search box and the first row of items. */
+	private static final int GRID_GAP = 3;
+
 	private static final int FOOTER_HEIGHT = 18;
+
+	/** The bank's scrollbar: 16px wide, with 16x16 arrows and 5px thumb end caps. */
 	private static final int SCROLLBAR_WIDTH = 16;
 	private static final int SCROLLBAR_GAP = 4;
+	private static final int SCROLL_ARROW_HEIGHT = 16;
+	private static final int SCROLL_THUMB_END = 5;
+	private static final int MIN_THUMB_HEIGHT = 12;
 
-	/** Every sprite the frame needs. If any is missing the window is drawn flat instead. */
-	private static final int[] FRAME_SPRITES = {
-		SpriteID.TRADEBACKING,
+	/** Every sprite the window needs. If any is missing it is drawn flat instead. */
+	private static final int[] SPRITES = {
+		SpriteID.TRADEBACKING, SpriteID.TRADEBACKING_DARK,
 		SpriteID.Steelborder.TOP_LEFT, SpriteID.Steelborder.TOP_RIGHT,
 		SpriteID.Steelborder.BOTTOM_LEFT, SpriteID.Steelborder.BOTTOM_RIGHT,
 		SpriteID.Steelborder2.EDGE_TOP, SpriteID.Steelborder2.EDGE_RIGHT,
 		SpriteID.Miscgraphics.IRON_RIVETS_HORIZONTAL, SpriteID.Miscgraphics.IRON_RIVETS_VERTICAL,
 		SpriteID.SteelborderDivider._0,
 		SpriteID.CloseButtons.BUTTON, SpriteID.CloseButtons.HOVERED,
+		SpriteID.Banktabs.TAB, SpriteID.Banktabs.HOVERED, SpriteID.Banktabs.SELECTED,
+		SpriteID.BanktabIcons.ALL_ITEMS, SpriteID.BankStorage._4,
+		SpriteID.TabsShort._0, SpriteID.TabsShort._1, SpriteID.TabsShort._2,
+		SpriteID.TabsShort._3, SpriteID.TabsShort._4, SpriteID.TabsShort._5,
+		SpriteID.V2StoneButton.TOP_LEFT, SpriteID.V2StoneButton.TOP_RIGHT,
+		SpriteID.V2StoneButton.BOTTOM_LEFT, SpriteID.V2StoneButton.BOTTOM_RIGHT,
+		SpriteID.V2StoneButton.LEFT, SpriteID.V2StoneButton.TOP,
+		SpriteID.V2StoneButton.RIGHT, SpriteID.V2StoneButton.BOTTOM,
+		SpriteID.ScrollbarV2.ARROW_UP, SpriteID.ScrollbarV2.ARROW_DOWN,
+		SpriteID.ScrollbarDraggerV2.TOP, SpriteID.ScrollbarDraggerV2.MIDDLE,
+		SpriteID.ScrollbarDraggerV2.BOTTOM, SpriteID.ScrollbarDraggerV2.TRACK,
 	};
 
-	/** Height for a window whose tab strip occupies the given number of rows. */
-	private static int heightFor(int tabRows)
-	{
-		return CONTENT_TOP + tabRows * TAB_HEIGHT + SEARCH_HEIGHT
-			+ VISIBLE_ROWS * CELL_HEIGHT + FOOTER_HEIGHT + FRAME_EDGE;
-	}
+	/**
+	 * The short text tab's pieces, as (end, middle) pairs per state. The game builds the
+	 * right-hand end by mirroring the left one.
+	 */
+	private static final int MEMBER_TAB_ACTIVE_END = SpriteID.TabsShort._0;
+	private static final int MEMBER_TAB_ACTIVE_MIDDLE = SpriteID.TabsShort._1;
+	private static final int MEMBER_TAB_IDLE_END = SpriteID.TabsShort._2;
+	private static final int MEMBER_TAB_IDLE_MIDDLE = SpriteID.TabsShort._3;
+	private static final int MEMBER_TAB_HOVER_END = SpriteID.TabsShort._4;
+	private static final int MEMBER_TAB_HOVER_MIDDLE = SpriteID.TabsShort._5;
 
-	/** Rows the tab strip needed when it was last laid out. */
-	private volatile int tabRows = 1;
-
-	static final int WIDTH =
-		PADDING * 2 + GroupBankViewer.COLUMNS * CELL_WIDTH + SCROLLBAR_GAP + SCROLLBAR_WIDTH;
+	private static final String TITLE = "Group Bank (view only)";
+	private static final String SEARCH_PROMPT = "Click here to search";
 
 	/**
 	 * Where the game draws a stack's quantity, relative to the top-left of its 36x32 item
@@ -130,6 +180,16 @@ public class GroupBankOverlay extends Overlay
 
 	/** Matches the skills hover panel, which is dark enough to stay readable over the bank. */
 	private static final Color TOOLTIP_BACKGROUND = new Color(22, 19, 15, 235);
+
+	/** Height for a window whose tab strip is this tall. */
+	private static int heightFor(int stripHeight)
+	{
+		return CONTENT_TOP + stripHeight + SEARCH_GAP + SEARCH_HEIGHT + GRID_GAP
+			+ VISIBLE_ROWS * CELL_HEIGHT + FOOTER_HEIGHT + FRAME_EDGE;
+	}
+
+	static final int WIDTH =
+		PADDING * 2 + GroupBankViewer.COLUMNS * CELL_WIDTH + SCROLLBAR_GAP + SCROLLBAR_WIDTH;
 
 	@Inject
 	private Client client;
@@ -160,6 +220,17 @@ public class GroupBankOverlay extends Overlay
 	private int frameImageVersion = -1;
 
 	/**
+	 * The tab strip as last laid out, and the tab list it was laid out for. The viewer
+	 * replaces its list whenever the tabs change, so comparing identity is enough to know
+	 * when to lay them out again.
+	 */
+	private TabLayout tabLayout = TabLayout.EMPTY;
+	private List<String> tabLayoutSource;
+
+	/** How tall the tab strip was when it was last laid out, which sets the window's height. */
+	private volatile int stripHeight = TILE_HEIGHT;
+
+	/**
 	 * Hit boxes in canvas coordinates, rebuilt on the client thread every frame and read on
 	 * the AWT thread by {@link GroupBankInput}. Published as one immutable snapshot so the
 	 * input handler can never observe a half-built frame or iterate a list being rewritten.
@@ -172,6 +243,8 @@ public class GroupBankOverlay extends Overlay
 	private Rectangle frameSearch = new Rectangle();
 	private Rectangle frameGrid = new Rectangle();
 	private Rectangle frameScrollbar = new Rectangle();
+	private Rectangle frameScrollUp = new Rectangle();
+	private Rectangle frameScrollDown = new Rectangle();
 
 	@Inject
 	public GroupBankOverlay()
@@ -185,7 +258,7 @@ public class GroupBankOverlay extends Overlay
 
 	public Dimension getWindowSize()
 	{
-		return new Dimension(WIDTH, heightFor(tabRows));
+		return new Dimension(WIDTH, heightFor(stripHeight));
 	}
 
 	@Override
@@ -210,28 +283,34 @@ public class GroupBankOverlay extends Overlay
 
 		// Tabs are laid out before anything is drawn, because how many rows they need
 		// decides how tall the window is.
-		graphics.setFont(GameText.REGULAR);
-		List<List<TabSlot>> layout = layoutTabs(graphics.getFontMetrics(), viewer.getTabs());
-		tabRows = Math.max(1, layout.size());
-		int height = heightFor(tabRows);
+		List<String> tabs = viewer.getTabs();
+		if (tabs != tabLayoutSource)
+		{
+			graphics.setFont(GameText.REGULAR);
+			tabLayout = layoutTabs(graphics.getFontMetrics(), tabs);
+			tabLayoutSource = tabs;
+		}
+		stripHeight = tabLayout.height;
+		int height = heightFor(tabLayout.height);
 
-		boolean skinned = sprites.hasAll(FRAME_SPRITES);
+		boolean skinned = sprites.hasAll(SPRITES);
 		drawFrame(graphics, height, skinned);
 		int y = drawTitle(graphics, origin, local, skinned);
-		y = drawTabs(graphics, origin, y, local, layout);
-		y = drawSearch(graphics, origin, y, local);
-		drawGrid(graphics, origin, y, local);
+		y = drawTabs(graphics, origin, y, local, skinned);
+		y = drawSearch(graphics, origin, y, local, skinned);
+		drawGrid(graphics, origin, y, local, skinned);
 		drawFooter(graphics, height);
 
 		hits = new HitBoxes(
 			new Rectangle(origin.x, origin.y, WIDTH, height),
-			frameClose, frameSearch, frameGrid, frameScrollbar, frameTabs);
+			frameClose, frameSearch, frameGrid, frameScrollbar, frameScrollUp, frameScrollDown,
+			frameTabs);
 
 		return new Dimension(WIDTH, height);
 	}
 
 	// ------------------------------------------------------------------
-	// Drawing
+	// Frame and title
 	// ------------------------------------------------------------------
 
 	/**
@@ -311,8 +390,7 @@ public class GroupBankOverlay extends Overlay
 		// Centred across the whole window, as the bank centres its own title.
 		graphics.setFont(GameText.BOLD);
 		FontMetrics metrics = graphics.getFontMetrics();
-		String title = "Group Bank (view only)";
-		GameText.drawShadowed(graphics, title, (WIDTH - metrics.stringWidth(title)) / 2,
+		GameText.drawShadowed(graphics, TITLE, (WIDTH - metrics.stringWidth(TITLE)) / 2,
 			GameText.centredBaseline(metrics, TITLE_TOP, TITLE_HEIGHT), GameText.ORANGE);
 
 		Rectangle close = new Rectangle(WIDTH - CLOSE_RIGHT, CLOSE_TOP, CLOSE_WIDTH, CLOSE_HEIGHT);
@@ -332,107 +410,244 @@ public class GroupBankOverlay extends Overlay
 		return CONTENT_TOP;
 	}
 
+	// ------------------------------------------------------------------
+	// Tabs
+	// ------------------------------------------------------------------
+
 	/**
-	 * Arranges the tabs into rows that fit the window's width.
+	 * Arranges the tab strip: the All and Group Storage tiles first, then a tab per member,
+	 * wrapping onto further rows when the names do not fit.
 	 * <p>
-	 * They used to be drawn on a single strip, and anything past the right edge was simply
+	 * Tabs used to be drawn on a single strip, and anything past the right edge was simply
 	 * dropped. With a full group that silently swallowed the last tab, which is how the
 	 * group storage tab became unreachable. Wrapping keeps every tab clickable.
 	 */
-	private List<List<TabSlot>> layoutTabs(FontMetrics metrics, List<String> tabs)
+	private TabLayout layoutTabs(FontMetrics metrics, List<String> tabs)
 	{
-		List<List<TabSlot>> rows = new ArrayList<>();
+		List<TabSlot> slots = new ArrayList<>();
 		if (tabs.isEmpty())
 		{
-			return rows;
+			return TabLayout.EMPTY;
 		}
 
-		int available = WIDTH - PADDING * 2;
-		List<TabSlot> row = new ArrayList<>();
-		int x = PADDING;
-
+		int tileX = PADDING;
 		for (String tab : tabs)
 		{
-			String label = abbreviate(tab, metrics, 96);
-			int width = Math.min(available, metrics.stringWidth(label) + 12);
-
-			if (x > PADDING && x + width > available + PADDING)
+			if (isTileTab(tab))
 			{
-				rows.add(row);
-				row = new ArrayList<>();
-				x = PADDING;
+				slots.add(new TabSlot(tab, tab, true, new Rectangle(tileX, CONTENT_TOP, TILE_WIDTH, TILE_HEIGHT)));
+				tileX += TILE_WIDTH + TILE_GAP;
+			}
+		}
+
+		int left = tileX - TILE_GAP + MEMBER_TABS_GAP;
+		int right = WIDTH - PADDING;
+		int x = left;
+		int row = 0;
+		for (String tab : tabs)
+		{
+			if (isTileTab(tab))
+			{
+				continue;
 			}
 
-			row.add(new TabSlot(tab, label, x, width));
-			x += width + 2;
+			String label = abbreviate(tab, metrics, MEMBER_LABEL_MAX_WIDTH);
+			int width = Math.min(right - left, metrics.stringWidth(label) + MEMBER_TAB_PADDING * 2);
+			if (x > left && x + width > right)
+			{
+				row++;
+				x = left;
+			}
+
+			slots.add(new TabSlot(tab, label, false,
+				new Rectangle(x, CONTENT_TOP + row * MEMBER_TAB_HEIGHT, width, MEMBER_TAB_HEIGHT)));
+			x += width + MEMBER_TAB_GAP;
 		}
 
-		if (!row.isEmpty())
-		{
-			rows.add(row);
-		}
-		return rows;
+		boolean anyMembers = slots.stream().anyMatch(slot -> !slot.tile);
+		int membersHeight = anyMembers ? (row + 1) * MEMBER_TAB_HEIGHT : 0;
+		return new TabLayout(Collections.unmodifiableList(slots), Math.max(TILE_HEIGHT, membersHeight));
 	}
 
-	private int drawTabs(Graphics2D graphics, java.awt.Point origin, int top,
-		java.awt.Point local, List<List<TabSlot>> layout)
+	private static boolean isTileTab(String tab)
+	{
+		return GroupBankViewer.TAB_ALL.equals(tab) || GroupBankViewer.TAB_SHARED.equals(tab);
+	}
+
+	private int drawTabs(Graphics2D graphics, java.awt.Point origin, int top, java.awt.Point local, boolean skinned)
 	{
 		graphics.setFont(GameText.REGULAR);
+		FontMetrics metrics = graphics.getFontMetrics();
 
-		int y = top;
-		for (List<TabSlot> row : layout)
+		for (TabSlot slot : tabLayout.slots)
 		{
-			for (TabSlot slot : row)
+			Rectangle box = slot.box;
+			boolean active = slot.tab.equals(viewer.getActiveTab());
+			boolean hovered = box.contains(local);
+
+			if (slot.tile)
 			{
-				Rectangle rect = new Rectangle(slot.x, y + 2, slot.width, TAB_HEIGHT - 4);
-				boolean active = slot.tab.equals(viewer.getActiveTab());
-
-				graphics.setColor(active ? BankStyle.TAB_ACTIVE : BankStyle.TAB_IDLE);
-				graphics.fillRect(rect.x, rect.y, rect.width, rect.height);
-
-				if (rect.contains(local) && !active)
-				{
-					graphics.setColor(BankStyle.HOVER);
-					graphics.fillRect(rect.x, rect.y, rect.width, rect.height);
-				}
-
-				boolean lit = active || rect.contains(local);
-				GameText.drawShadowed(graphics, slot.label, rect.x + 6, rect.y + rect.height - 3,
-					lit ? GameText.HOVER : GameText.ORANGE);
-
-				frameTabs.add(new TabHit(slot.tab, toCanvas(rect, origin)));
+				drawTile(graphics, slot, active, hovered, skinned);
 			}
-			y += TAB_HEIGHT;
+			else
+			{
+				drawMemberTab(graphics, metrics, slot, active, hovered, skinned);
+			}
+
+			frameTabs.add(new TabHit(slot.tab, toCanvas(box, origin)));
 		}
 
-		return Math.max(y, top + TAB_HEIGHT);
+		// The line closing off the strip, as the bank draws under its own tabs.
+		int bottom = top + tabLayout.height;
+		graphics.setColor(BankStyle.SEPARATOR);
+		graphics.drawLine(FRAME_EDGE, bottom - 1, WIDTH - FRAME_EDGE - 1, bottom - 1);
+		return bottom;
 	}
 
-	/** One tab's place on its row, worked out before anything is drawn. */
+	/**
+	 * One of the bank's own tab tiles, with its icon. Icons carry no text, so hovering one
+	 * names it, as hovering a bank tab does.
+	 */
+	private void drawTile(Graphics2D graphics, TabSlot slot, boolean active, boolean hovered, boolean skinned)
+	{
+		Rectangle box = slot.box;
+		boolean all = GroupBankViewer.TAB_ALL.equals(slot.tab);
+
+		if (skinned)
+		{
+			int tile = active ? SpriteID.Banktabs.SELECTED
+				: hovered ? SpriteID.Banktabs.HOVERED
+				: SpriteID.Banktabs.TAB;
+			sprites.draw(graphics, tile, box.x, box.y);
+			sprites.drawCentred(graphics, all ? SpriteID.BanktabIcons.ALL_ITEMS : SpriteID.BankStorage._4,
+				box.x, box.y, box.width, box.height);
+		}
+		else
+		{
+			drawFlatTab(graphics, box, active, hovered);
+			graphics.setFont(GameText.SMALL);
+			FontMetrics small = graphics.getFontMetrics();
+			String label = all ? "All" : "Storage";
+			GameText.drawShadowed(graphics, label, box.x + (box.width - small.stringWidth(label)) / 2,
+				GameText.centredBaseline(small, box.y, box.height),
+				active || hovered ? GameText.HOVER : GameText.ORANGE);
+			graphics.setFont(GameText.REGULAR);
+		}
+
+		if (hovered)
+		{
+			tooltipManager.add(new Tooltip(all ? "All items" : GroupBankViewer.TAB_SHARED));
+		}
+	}
+
+	/**
+	 * A member's tab: the game's short text tab, built from an end piece, a middle that
+	 * stretches to fit the name, and the end piece mirrored. On a tab narrower than both
+	 * ends, each end gets half.
+	 */
+	private void drawMemberTab(Graphics2D graphics, FontMetrics metrics, TabSlot slot, boolean active,
+		boolean hovered, boolean skinned)
+	{
+		Rectangle box = slot.box;
+
+		if (skinned)
+		{
+			int end = active ? MEMBER_TAB_ACTIVE_END : hovered ? MEMBER_TAB_HOVER_END : MEMBER_TAB_IDLE_END;
+			int middle = active ? MEMBER_TAB_ACTIVE_MIDDLE : hovered ? MEMBER_TAB_HOVER_MIDDLE : MEMBER_TAB_IDLE_MIDDLE;
+			int cap = sprites.widthOf(end, MEMBER_TAB_CAP);
+			int leftCap = Math.min(cap, box.width / 2);
+			int rightCap = Math.min(cap, box.width - leftCap);
+
+			sprites.tile(graphics, middle, box.x + leftCap, box.y, box.width - leftCap - rightCap, box.height);
+
+			Shape clip = graphics.getClip();
+			graphics.clipRect(box.x, box.y, leftCap, box.height);
+			sprites.draw(graphics, end, box.x, box.y);
+			graphics.setClip(clip);
+			graphics.clipRect(box.x + box.width - rightCap, box.y, rightCap, box.height);
+			sprites.drawMirrored(graphics, end, box.x + box.width - cap, box.y);
+			graphics.setClip(clip);
+		}
+		else
+		{
+			drawFlatTab(graphics, box, active, hovered);
+		}
+
+		GameText.drawShadowed(graphics, slot.label, box.x + (box.width - metrics.stringWidth(slot.label)) / 2,
+			GameText.centredBaseline(metrics, box.y, box.height),
+			active || hovered ? GameText.HOVER : GameText.ORANGE);
+	}
+
+	private static void drawFlatTab(Graphics2D graphics, Rectangle box, boolean active, boolean hovered)
+	{
+		graphics.setColor(active ? BankStyle.TAB_ACTIVE : BankStyle.TAB_IDLE);
+		graphics.fillRect(box.x, box.y + 1, box.width, box.height - 2);
+		if (hovered && !active)
+		{
+			graphics.setColor(BankStyle.HOVER);
+			graphics.fillRect(box.x, box.y + 1, box.width, box.height - 2);
+		}
+	}
+
+	/** One tab's place in the strip, worked out before anything is drawn. */
 	private static final class TabSlot
 	{
 		private final String tab;
 		private final String label;
-		private final int x;
-		private final int width;
+		private final boolean tile;
+		private final Rectangle box;
 
-		TabSlot(String tab, String label, int x, int width)
+		TabSlot(String tab, String label, boolean tile, Rectangle box)
 		{
 			this.tab = tab;
 			this.label = label;
-			this.x = x;
-			this.width = width;
+			this.tile = tile;
+			this.box = box;
 		}
 	}
 
-	private int drawSearch(Graphics2D graphics, java.awt.Point origin, int top, java.awt.Point local)
+	/** The whole strip: every tab's place, and how tall the strip is. */
+	private static final class TabLayout
 	{
-		Rectangle rect = new Rectangle(PADDING, top + 1, WIDTH - PADDING * 2, SEARCH_HEIGHT - 4);
+		private static final TabLayout EMPTY = new TabLayout(Collections.emptyList(), TILE_HEIGHT);
 
-		graphics.setColor(BankStyle.SEARCH_BACKGROUND);
-		graphics.fillRect(rect.x, rect.y, rect.width, rect.height);
-		graphics.setColor(viewer.isSearchFocused() ? BankStyle.TEXT : BankStyle.BORDER);
-		graphics.drawRect(rect.x, rect.y, rect.width, rect.height);
+		private final List<TabSlot> slots;
+		private final int height;
+
+		TabLayout(List<TabSlot> slots, int height)
+		{
+			this.slots = slots;
+			this.height = height;
+		}
+	}
+
+	// ------------------------------------------------------------------
+	// Search box
+	// ------------------------------------------------------------------
+
+	private int drawSearch(Graphics2D graphics, java.awt.Point origin, int top, java.awt.Point local, boolean skinned)
+	{
+		Rectangle rect = new Rectangle(PADDING, top + SEARCH_GAP, WIDTH - PADDING * 2, SEARCH_HEIGHT);
+		boolean hovered = rect.contains(local);
+
+		if (skinned)
+		{
+			// The game's stone button outline around the darker backing the game uses for
+			// input fields.
+			sprites.tile(graphics, SpriteID.TRADEBACKING_DARK, rect.x + 2, rect.y + 2, rect.width - 4, rect.height - 4);
+			sprites.drawNineSlice(graphics,
+				SpriteID.V2StoneButton.TOP_LEFT, SpriteID.V2StoneButton.TOP, SpriteID.V2StoneButton.TOP_RIGHT,
+				SpriteID.V2StoneButton.LEFT, SpriteID.V2StoneButton.RIGHT,
+				SpriteID.V2StoneButton.BOTTOM_LEFT, SpriteID.V2StoneButton.BOTTOM, SpriteID.V2StoneButton.BOTTOM_RIGHT,
+				rect.x, rect.y, rect.width, rect.height);
+		}
+		else
+		{
+			graphics.setColor(BankStyle.SEARCH_BACKGROUND);
+			graphics.fillRect(rect.x, rect.y, rect.width, rect.height);
+			graphics.setColor(viewer.isSearchFocused() ? BankStyle.TEXT : BankStyle.BORDER);
+			graphics.drawRect(rect.x, rect.y, rect.width - 1, rect.height - 1);
+		}
 
 		graphics.setFont(GameText.REGULAR);
 		String filter = viewer.getFilter();
@@ -450,23 +665,31 @@ public class GroupBankOverlay extends Overlay
 		}
 		else
 		{
-			text = "Click here to search";
-			colour = rect.contains(local) ? GameText.HOVER : GameText.ORANGE;
+			text = SEARCH_PROMPT;
+			colour = hovered ? GameText.HOVER : GameText.ORANGE;
 		}
 
-		GameText.drawShadowed(graphics, text, rect.x + 5, rect.y + rect.height - 3, colour);
+		GameText.drawShadowed(graphics, text, rect.x + SEARCH_TEXT_X,
+			GameText.centredBaseline(graphics.getFontMetrics(), rect.y, rect.height), colour);
 
 		frameSearch = toCanvas(rect, origin);
-		return top + SEARCH_HEIGHT;
+		return rect.y + rect.height + GRID_GAP;
 	}
 
-	private void drawGrid(Graphics2D graphics, java.awt.Point origin, int top, java.awt.Point local)
+	// ------------------------------------------------------------------
+	// Grid and scrollbar
+	// ------------------------------------------------------------------
+
+	private void drawGrid(Graphics2D graphics, java.awt.Point origin, int top, java.awt.Point local, boolean skinned)
 	{
 		Rectangle area = new Rectangle(PADDING, top, GroupBankViewer.COLUMNS * CELL_WIDTH,
 			VISIBLE_ROWS * CELL_HEIGHT);
 		frameGrid = toCanvas(area, origin);
 
 		List<GroupBankViewer.Row> rows = viewer.getRows();
+		int first = Math.min(viewer.getScrollRow(), Math.max(0, rows.size() - 1));
+		drawScrollbar(graphics, origin, area, rows.size(), first, skinned);
+
 		if (rows.isEmpty())
 		{
 			graphics.setFont(GameText.REGULAR);
@@ -477,10 +700,9 @@ public class GroupBankOverlay extends Overlay
 			return;
 		}
 
-		java.awt.Shape clip = graphics.getClip();
+		Shape clip = graphics.getClip();
 		graphics.clipRect(area.x, area.y, area.width, area.height);
 
-		int first = Math.min(viewer.getScrollRow(), Math.max(0, rows.size() - 1));
 		int y = area.y;
 
 		for (int index = first; index < rows.size() && y < area.y + area.height; index++)
@@ -491,7 +713,7 @@ public class GroupBankOverlay extends Overlay
 			{
 				graphics.setFont(GameText.REGULAR);
 				GameText.drawShadowed(graphics, row.getHeader(), area.x + 2, y + 15, GameText.ORANGE);
-				graphics.setColor(BankStyle.BORDER);
+				graphics.setColor(BankStyle.SEPARATOR);
 				graphics.drawLine(area.x + 2, y + 19, area.x + area.width - 4, y + 19);
 				y += CELL_HEIGHT;
 				continue;
@@ -507,18 +729,16 @@ public class GroupBankOverlay extends Overlay
 		}
 
 		graphics.setClip(clip);
-		drawScrollbar(graphics, origin, area, rows.size(), first);
 	}
 
 	private void drawCell(Graphics2D graphics, GroupBankViewer.Entry entry, int x, int y, java.awt.Point local)
 	{
-		Rectangle cell = new Rectangle(x, y, CELL_WIDTH, CELL_HEIGHT);
-		boolean hovered = cell.contains(local);
+		boolean hovered = local.x >= x && local.x < x + CELL_WIDTH && local.y >= y && local.y < y + CELL_HEIGHT;
 
 		if (hovered)
 		{
 			graphics.setColor(BankStyle.HOVER);
-			graphics.fillRect(cell.x, cell.y, cell.width, cell.height);
+			graphics.fillRect(x, y, CELL_WIDTH, CELL_HEIGHT);
 		}
 
 		long quantity = entry.getQuantity();
@@ -551,27 +771,65 @@ public class GroupBankOverlay extends Overlay
 		}
 	}
 
+	/**
+	 * The bank's scrollbar: arrows at either end, the track between them and a thumb
+	 * stretched to show how much is in view. Drawn even when there is nothing to scroll, as
+	 * the bank draws its own, but only clickable when there is.
+	 */
 	private void drawScrollbar(Graphics2D graphics, java.awt.Point origin, Rectangle area,
-		int totalRows, int firstRow)
+		int totalRows, int firstRow, boolean skinned)
 	{
-		if (totalRows <= VISIBLE_ROWS)
+		int x = area.x + area.width + SCROLLBAR_GAP;
+		Rectangle up = new Rectangle(x, area.y, SCROLLBAR_WIDTH, SCROLL_ARROW_HEIGHT);
+		Rectangle down = new Rectangle(x, area.y + area.height - SCROLL_ARROW_HEIGHT,
+			SCROLLBAR_WIDTH, SCROLL_ARROW_HEIGHT);
+		Rectangle track = new Rectangle(x, up.y + up.height, SCROLLBAR_WIDTH, down.y - up.y - up.height);
+
+		boolean scrollable = totalRows > VISIBLE_ROWS;
+		int thumbHeight = scrollable ? thumbHeight(track.height, totalRows) : track.height;
+		int travel = track.height - thumbHeight;
+		int maxScroll = Math.max(1, totalRows - VISIBLE_ROWS);
+		int thumbY = track.y + (scrollable ? (int) ((long) travel * Math.min(firstRow, maxScroll) / maxScroll) : 0);
+
+		if (skinned)
 		{
-			frameScrollbar = new Rectangle();
-			return;
+			sprites.tile(graphics, SpriteID.ScrollbarDraggerV2.TRACK, track.x, track.y, track.width, track.height);
+			sprites.draw(graphics, SpriteID.ScrollbarV2.ARROW_UP, up.x, up.y);
+			sprites.draw(graphics, SpriteID.ScrollbarV2.ARROW_DOWN, down.x, down.y);
+
+			sprites.tile(graphics, SpriteID.ScrollbarDraggerV2.MIDDLE, x, thumbY + SCROLL_THUMB_END,
+				SCROLLBAR_WIDTH, thumbHeight - SCROLL_THUMB_END * 2);
+			sprites.draw(graphics, SpriteID.ScrollbarDraggerV2.TOP, x, thumbY);
+			sprites.draw(graphics, SpriteID.ScrollbarDraggerV2.BOTTOM, x, thumbY + thumbHeight - SCROLL_THUMB_END);
+		}
+		else
+		{
+			graphics.setColor(BankStyle.SEARCH_BACKGROUND);
+			graphics.fillRect(x, area.y, SCROLLBAR_WIDTH, area.height);
+			graphics.setColor(BankStyle.TAB_IDLE);
+			graphics.fillRect(up.x, up.y, up.width, up.height);
+			graphics.fillRect(down.x, down.y, down.width, down.height);
+			graphics.setColor(BankStyle.BORDER);
+			graphics.fillRect(x, thumbY, SCROLLBAR_WIDTH, thumbHeight);
 		}
 
-		int x = area.x + area.width + SCROLLBAR_GAP;
-		frameScrollbar = toCanvas(new Rectangle(x, area.y, SCROLLBAR_WIDTH, area.height), origin);
-		graphics.setColor(BankStyle.SEARCH_BACKGROUND);
-		graphics.fillRect(x, area.y, SCROLLBAR_WIDTH, area.height);
+		if (scrollable)
+		{
+			frameScrollbar = toCanvas(track, origin);
+			frameScrollUp = toCanvas(up, origin);
+			frameScrollDown = toCanvas(down, origin);
+		}
+		else
+		{
+			frameScrollbar = new Rectangle();
+			frameScrollUp = new Rectangle();
+			frameScrollDown = new Rectangle();
+		}
+	}
 
-		int thumbHeight = Math.max(12, area.height * VISIBLE_ROWS / totalRows);
-		int travel = area.height - thumbHeight;
-		int maxScroll = Math.max(1, totalRows - VISIBLE_ROWS);
-		int thumbY = area.y + (int) ((long) travel * Math.min(firstRow, maxScroll) / maxScroll);
-
-		graphics.setColor(BankStyle.BORDER);
-		graphics.fillRect(x, thumbY, SCROLLBAR_WIDTH, thumbHeight);
+	private static int thumbHeight(int trackHeight, int totalRows)
+	{
+		return Math.min(trackHeight, Math.max(MIN_THUMB_HEIGHT, trackHeight * VISIBLE_ROWS / totalRows));
 	}
 
 	private void drawFooter(Graphics2D graphics, int height)
@@ -688,7 +946,7 @@ public class GroupBankOverlay extends Overlay
 			return 0;
 		}
 
-		int thumbHeight = Math.max(12, track.height * VISIBLE_ROWS / totalRows);
+		int thumbHeight = thumbHeight(track.height, totalRows);
 		int travel = Math.max(1, track.height - thumbHeight);
 		int offset = canvasY - track.y - thumbHeight / 2;
 
@@ -710,23 +968,28 @@ public class GroupBankOverlay extends Overlay
 	{
 		static final HitBoxes EMPTY = new HitBoxes(
 			new Rectangle(), new Rectangle(), new Rectangle(), new Rectangle(), new Rectangle(),
-			java.util.Collections.emptyList());
+			new Rectangle(), new Rectangle(), java.util.Collections.emptyList());
 
 		final Rectangle window;
 		final Rectangle close;
 		final Rectangle search;
 		final Rectangle grid;
+		/** The scrollbar's track, between its arrows. Empty when there is nothing to scroll. */
 		final Rectangle scrollbar;
+		final Rectangle scrollUp;
+		final Rectangle scrollDown;
 		final List<TabHit> tabs;
 
 		HitBoxes(Rectangle window, Rectangle close, Rectangle search, Rectangle grid,
-			Rectangle scrollbar, List<TabHit> tabs)
+			Rectangle scrollbar, Rectangle scrollUp, Rectangle scrollDown, List<TabHit> tabs)
 		{
 			this.window = window;
 			this.close = close;
 			this.search = search;
 			this.grid = grid;
 			this.scrollbar = scrollbar;
+			this.scrollUp = scrollUp;
+			this.scrollDown = scrollDown;
 			this.tabs = java.util.Collections.unmodifiableList(tabs);
 		}
 	}
@@ -736,6 +999,10 @@ public class GroupBankOverlay extends Overlay
 		return new Rectangle(local.x + origin.x, local.y + origin.y, local.width, local.height);
 	}
 
+	/**
+	 * Shortens text to fit, ending it with three dots. The game's fonts have no ellipsis
+	 * character, so the single-glyph one would draw as a missing-glyph box.
+	 */
 	private static String abbreviate(String text, FontMetrics metrics, int maxWidth)
 	{
 		if (metrics.stringWidth(text) <= maxWidth)
@@ -743,11 +1010,11 @@ public class GroupBankOverlay extends Overlay
 			return text;
 		}
 		String result = text;
-		while (result.length() > 1 && metrics.stringWidth(result + "…") > maxWidth)
+		while (result.length() > 1 && metrics.stringWidth(result + "...") > maxWidth)
 		{
 			result = result.substring(0, result.length() - 1);
 		}
-		return result + "…";
+		return result + "...";
 	}
 
 	private static boolean blink()

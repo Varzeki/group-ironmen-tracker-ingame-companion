@@ -17,6 +17,9 @@ final class BankStyle
 	static final Color HOVER = new Color(255, 255, 255, 40);
 	static final Color SEARCH_BACKGROUND = new Color(24, 21, 16, 255);
 
+	/** The bank's own separator lines, under its tabs and between its sections. */
+	static final Color SEPARATOR = new Color(0x2e2b23);
+
 	static final Color QUANTITY_LOW = new Color(255, 255, 0);
 	static final Color QUANTITY_MID = Color.WHITE;
 	static final Color QUANTITY_HIGH = new Color(0, 255, 128);
