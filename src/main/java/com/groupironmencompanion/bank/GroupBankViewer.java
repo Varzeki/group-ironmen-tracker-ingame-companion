@@ -236,7 +236,7 @@ public class GroupBankViewer
 		Map<String, List<ItemStack>> sections = new LinkedHashMap<>();
 		if (TAB_SHARED.equals(tab))
 		{
-			sections.put("Group storage", member.getBank());
+			sections.put(TAB_SHARED, member.getBank());
 		}
 		else
 		{

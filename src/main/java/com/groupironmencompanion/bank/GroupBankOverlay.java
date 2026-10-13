@@ -1,6 +1,7 @@
 package com.groupironmencompanion.bank;
 
 import com.groupironmencompanion.GroupIronmenCompanionConfig;
+import com.groupironmencompanion.api.GroupApi;
 import com.groupironmencompanion.data.GroupMember;
 import com.groupironmencompanion.data.GroupState;
 import com.groupironmencompanion.overlay.PanelBackground;
@@ -125,6 +126,9 @@ public class GroupBankOverlay extends Overlay
 	/** Space between the search box and the first row of items. */
 	private static final int GRID_GAP = 3;
 
+	/** How far down the grid the message for an empty tab starts. */
+	private static final int EMPTY_MESSAGE_TOP = 24;
+
 	private static final int FOOTER_HEIGHT = 18;
 
 	/** The bank's scrollbar: 16px wide, with 16x16 arrows and 5px thumb end caps. */
@@ -218,6 +222,9 @@ public class GroupBankOverlay extends Overlay
 
 	@Inject
 	private PanelBackground panelBackground;
+
+	@Inject
+	private GroupApi api;
 
 	/**
 	 * The frame composed into one image, since it is a few hundred sprite draws and only
@@ -700,11 +707,7 @@ public class GroupBankOverlay extends Overlay
 
 		if (rows.isEmpty())
 		{
-			graphics.setFont(GameText.REGULAR);
-			String message = viewer.getFilter().isEmpty()
-				? "No data yet. Check your group name and token."
-				: "Nothing matches \"" + viewer.getFilter() + "\"";
-			GameText.drawShadowed(graphics, message, area.x + 4, area.y + 18, GameText.ORANGE);
+			drawEmptyMessage(graphics, area);
 			return;
 		}
 
@@ -737,6 +740,51 @@ public class GroupBankOverlay extends Overlay
 		}
 
 		graphics.setClip(clip);
+	}
+
+	/**
+	 * Says why there is nothing to show. It used to blame the group name and token whenever a
+	 * tab was empty, even for a member who had simply never synced while everyone else showed
+	 * up fine, which sent people off checking credentials that worked.
+	 */
+	private void drawEmptyMessage(Graphics2D graphics, Rectangle area)
+	{
+		String[] lines;
+		String tab = viewer.getActiveTab();
+		if (!viewer.getFilter().isEmpty())
+		{
+			lines = new String[]{"Nothing matches \"" + viewer.getFilter() + "\"."};
+		}
+		else if (!api.hasCredentials())
+		{
+			lines = new String[]{"Enter your group name and token", "in the plugin's Connection settings."};
+		}
+		else if (groupState.isEmpty())
+		{
+			lines = new String[]{"No data from your group yet.", "The side panel shows the connection status."};
+		}
+		else if (GroupBankViewer.TAB_SHARED.equals(tab))
+		{
+			lines = new String[]{"Group Storage is empty."};
+		}
+		else if (GroupBankViewer.TAB_ALL.equals(tab))
+		{
+			lines = new String[]{"Nobody in the group has shared any items yet."};
+		}
+		else
+		{
+			lines = new String[]{tab + " has not shared any items yet."};
+		}
+
+		graphics.setFont(GameText.REGULAR);
+		FontMetrics metrics = graphics.getFontMetrics();
+		int y = area.y + EMPTY_MESSAGE_TOP + metrics.getAscent();
+		for (String line : lines)
+		{
+			GameText.drawShadowed(graphics, line, area.x + (area.width - metrics.stringWidth(line)) / 2, y,
+				GameText.ORANGE);
+			y += metrics.getHeight();
+		}
 	}
 
 	private void drawCell(Graphics2D graphics, GroupBankViewer.Entry entry, int x, int y, java.awt.Point local)

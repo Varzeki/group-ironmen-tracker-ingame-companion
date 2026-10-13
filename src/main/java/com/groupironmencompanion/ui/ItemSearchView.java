@@ -232,7 +232,7 @@ class ItemSearchView extends JPanel
 			}
 			if (quantity > 0)
 			{
-				owners.put("Shared", quantity);
+				owners.put("Group Storage", quantity);
 			}
 		}
 		return owners;
