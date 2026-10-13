@@ -116,9 +116,11 @@ public final class Activity
 	public String describe(Instant now, boolean withPlace)
 	{
 		StringBuilder text = new StringBuilder();
-		if (withPlace && place != null)
+		// A place with no name (a blank label or area name) reads as no place at all.
+		boolean named = withPlace && place != null && place.getName() != null && !place.getName().trim().isEmpty();
+		String phrase = named ? place.phrase(preposition).trim() : "";
+		if (!phrase.isEmpty())
 		{
-			String phrase = place.phrase(preposition);
 			if (lead.isEmpty())
 			{
 				text.append(Character.toUpperCase(phrase.charAt(0))).append(phrase, 1, phrase.length());

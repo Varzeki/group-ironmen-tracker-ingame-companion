@@ -453,4 +453,13 @@ public class ActivityRulesTest
 		// The count keeps going between polls.
 		assertEquals("Idle at Catherby (3m)", activity().describe(now.plusSeconds(40), true));
 	}
+
+	@Test
+	public void aPlaceWithNoNameReadsAsNoPlace()
+	{
+		Instant at = Instant.parse("2026-10-13T11:00:00Z");
+		Activity blank = new Activity(Activity.Kind.OFFLINE, "", "Offline", "in", Place.at(""), "", at);
+
+		assertEquals("Offline", blank.describe(at, true));
+	}
 }
