@@ -1,6 +1,5 @@
 package com.groupironmencompanion.bank;
 
-import com.groupironmencompanion.GroupIronmenCompanionConfig;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
@@ -69,9 +68,6 @@ public class GameSprites
 	@Inject
 	private Client client;
 
-	@Inject
-	private GroupIronmenCompanionConfig config;
-
 	private final Map<Integer, Sprite> sprites = new HashMap<>();
 	private final Map<Integer, Long> missing = new HashMap<>();
 
@@ -83,9 +79,6 @@ public class GameSprites
 
 	/** Set from any thread when a theme setting changes; acted on by the next refresh. */
 	private volatile boolean invalidated;
-
-	/** Whether the cached sprites were loaded with overrides honoured. */
-	private boolean themed = true;
 
 	/** The client tick of the last refresh, so it only runs once however many overlays ask. */
 	private int refreshedCycle = -1;
@@ -137,7 +130,7 @@ public class GameSprites
 			return null;
 		}
 
-		SpritePixels override = themed ? overrideFor(id) : null;
+		SpritePixels override = overrideFor(id);
 		SpritePixels pixels = override != null ? override : fromCache(id);
 		if (pixels == null || pixels.getWidth() <= 0 || pixels.getHeight() <= 0)
 		{
@@ -219,15 +212,13 @@ public class GameSprites
 		}
 		refreshedCycle = cycle;
 
-		boolean followTheme = config.matchInterfaceTheme();
-		if (invalidated || followTheme != themed || (followTheme && overridesChanged()))
+		if (invalidated || overridesChanged())
 		{
 			invalidated = false;
-			themed = followTheme;
 			clear();
 		}
 
-		readLineColour(followTheme);
+		readLineColour();
 	}
 
 	private boolean overridesChanged()
@@ -249,18 +240,14 @@ public class GameSprites
 	 * open, and keeps the last one seen for while it is not. A colour pack recolours these
 	 * lines directly, so this is the only place its colour can be found.
 	 */
-	private void readLineColour(boolean followTheme)
+	private void readLineColour()
 	{
-		int rgb = BankStyle.SEPARATOR.getRGB() & 0xFFFFFF;
-		if (followTheme)
+		Widget line = client.getWidget(InterfaceID.Bankmain.TABS_LINE0);
+		if (line == null || line.isHidden())
 		{
-			Widget line = client.getWidget(InterfaceID.Bankmain.TABS_LINE0);
-			if (line == null || line.isHidden())
-			{
-				return;
-			}
-			rgb = line.getTextColor() & 0xFFFFFF;
+			return;
 		}
+		int rgb = line.getTextColor() & 0xFFFFFF;
 
 		if (rgb != lineRgb)
 		{

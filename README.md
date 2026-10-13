@@ -45,8 +45,7 @@ It only swallows clicks inside its own frame, so your own bank stays fully usabl
   with the position.
 - **Themes:** it follows interface reskins from the Resource Packs plugin and RuneLite's
   Interface Styles, including the bank's line colours, and the map list, skills panel and
-  tooltips take RuneLite's overlay colour. Turn off **Match interface theme** for the plain
-  game look.
+  tooltips take RuneLite's overlay colour.
 
 **Group levels on the Skills tab** - hover any skill and a panel lists every member's level,
 experience and experience to the next level, each in that member's colour. The panel is
