@@ -59,7 +59,7 @@ public interface GroupIronmenCompanionConfig extends Config
 
 	@ConfigSection(
 		name = "Status overlay",
-		description = "An always-on summary of the group's vitals",
+		description = "An always-on summary of the group's vitals and a best guess at what each member is doing",
 		position = 5
 	)
 	String statusSection = "status";
@@ -419,7 +419,7 @@ public interface GroupIronmenCompanionConfig extends Config
 	@ConfigItem(
 		keyName = "statusOverlay",
 		name = "Enable status overlay",
-		description = "A compact always-on overlay listing each member's hitpoints, prayer, run energy and world. Drag it with alt like any RuneLite overlay.",
+		description = "A compact always-on overlay listing each member's hitpoints, prayer, run energy, world and what they seem to be doing. Alt-drag it to move it, or alt-drag its edge to make it wider or narrower.",
 		position = 0,
 		section = statusSection
 	)
@@ -431,7 +431,7 @@ public interface GroupIronmenCompanionConfig extends Config
 	@ConfigItem(
 		keyName = "statusShowVitals",
 		name = "Show hitpoints, prayer and run",
-		description = "Include each member's vitals. Turn off for a compact list of just names and worlds.",
+		description = "Include each member's hitpoints, prayer and run energy as bars. Turn off for a compact list of just names and activities.",
 		position = 1,
 		section = statusSection
 	)
@@ -443,7 +443,7 @@ public interface GroupIronmenCompanionConfig extends Config
 	@ConfigItem(
 		keyName = "statusShowActivity",
 		name = "Show what members are doing",
-		description = "Include the NPC each member is interacting with, and its remaining health. Informational only; never drawn in the game scene.",
+		description = "A best guess at what each member is doing, worked out from the experience, position, items, quests and interactions their tracker shares: \"Fishing at Catherby\", \"Fighting Goblin (43%)\", \"Idle at Lumbridge (3m)\". It can be wrong: the tracker shares no activity of its own. Never drawn in the game scene.",
 		position = 2,
 		section = statusSection
 	)
@@ -476,6 +476,42 @@ public interface GroupIronmenCompanionConfig extends Config
 		return false;
 	}
 
+	@ConfigItem(
+		keyName = "statusValues",
+		name = "Numbers",
+		description = "Whether to write hitpoints, prayer and run energy as numbers too, on the bars or beside them. Both make each member taller.",
+		position = 5,
+		section = statusSection
+	)
+	default StatusValues statusValues()
+	{
+		return StatusValues.NONE;
+	}
+
+	@ConfigItem(
+		keyName = "statusShowLocation",
+		name = "Show where members are",
+		description = "Say where each member is as part of what they are doing, e.g. \"at Catherby\".",
+		position = 6,
+		section = statusSection
+	)
+	default boolean statusShowLocation()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "statusShowWorld",
+		name = "Show world",
+		description = "Show each member's world beside their name.",
+		position = 7,
+		section = statusSection
+	)
+	default boolean statusShowWorld()
+	{
+		return true;
+	}
+
 	@Range(min = 1, max = 60)
 	@ConfigItem(
 		keyName = "activityIdleMinutes",
@@ -487,6 +523,18 @@ public interface GroupIronmenCompanionConfig extends Config
 	default int activityIdleMinutes()
 	{
 		return 2;
+	}
+
+	@ConfigItem(
+		keyName = "statusBackdrop",
+		name = "Backdrop",
+		description = "Draw the overlay straight over the game, or on a translucent panel like other RuneLite overlays.",
+		position = 9,
+		section = statusSection
+	)
+	default StatusBackdrop statusBackdrop()
+	{
+		return StatusBackdrop.NONE;
 	}
 
 	// ------------------------------------------------------------------
@@ -551,6 +599,21 @@ public interface GroupIronmenCompanionConfig extends Config
 	{
 		AUTO,
 		OFF
+	}
+
+	/** Whether the status overlay writes vitals as numbers as well as bars. */
+	enum StatusValues
+	{
+		NONE,
+		ON_BARS,
+		BESIDE
+	}
+
+	/** What the status overlay is drawn on. */
+	enum StatusBackdrop
+	{
+		NONE,
+		TRANSLUCENT
 	}
 
 	/** Where the Skills tab hover panel is anchored. */
