@@ -270,9 +270,10 @@ public interface GroupIronmenCompanionConfig extends Config
 	@ConfigItem(
 		keyName = "natureRuneCost",
 		name = "Nature rune cost",
-		description = "Subtracted from every item's alch value so the figures shown are the profit "
-			+ "from alching, not the raw value. The default is roughly what buying them from a rune "
-			+ "shop works out at. Set this to 0 to show the raw alch value instead.",
+		description = "Subtracted from alch values to work out alch profit: per item in tooltips, and "
+			+ "for the profitable stacks in view in the footer, next to their raw alch value. The "
+			+ "default is roughly what buying them from a rune shop works out at. Set this to 0 to "
+			+ "show only the raw alch value.",
 		position = 6,
 		section = bankSection
 	)

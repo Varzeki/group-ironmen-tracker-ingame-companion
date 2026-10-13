@@ -442,8 +442,11 @@ public class GroupBankOverlay extends Overlay
 		text.append(viewer.getVisibleItemCount()).append(" stacks");
 		if (config.bankShowPrices())
 		{
-			text.append("  ·  ").append(BankStyle.gp(viewer.getVisibleValue()))
-				.append(config.natureRuneCost() > 0 ? " alch profit" : " alch");
+			text.append("  ·  ").append(BankStyle.gp(viewer.getVisibleValue())).append(" value");
+			if (config.natureRuneCost() > 0)
+			{
+				text.append("  ·  ").append(BankStyle.gp(viewer.getVisibleProfit())).append(" alch profit");
+			}
 		}
 		graphics.drawString(text.toString(), PADDING, height - 6);
 	}
