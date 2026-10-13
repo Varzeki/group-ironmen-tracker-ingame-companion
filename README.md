@@ -22,10 +22,11 @@ that appears beside your bank.
 It looks like the bank it sits next to: it is drawn from the bank's own frame, tab, button
 and scrollbar sprites, in the game's own fonts, with items at the bank's spacing.
 
-The first time you open it, it places itself to the left of the bank, or against the left
-edge of the screen when the bank is too wide to sit beside (which it always is in fixed
-mode). After that, alt-drag it wherever you like: RuneLite remembers the position and the
-plugin never moves it again.
+The first time you open it, it places itself to the right of the bank, just below the Group
+tab. If it does not fit there it goes to the left of the bank, or against the left edge of
+the screen when the bank is too wide to sit beside (which it always is in fixed mode). After
+that, alt-drag it wherever you like: RuneLite remembers the position and the plugin never
+moves it again.
 
 It only swallows clicks inside its own frame, so your own bank stays fully usable beside it.
 

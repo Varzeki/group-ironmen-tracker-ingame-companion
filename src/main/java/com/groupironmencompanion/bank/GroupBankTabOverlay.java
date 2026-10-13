@@ -42,6 +42,9 @@ public class GroupBankTabOverlay extends Overlay
 	/** How far below the bank's top edge its own row of tabs starts. */
 	private static final int TAB_ROW_TOP = 35;
 
+	/** The gap between the Group tab and the top of a viewer opened beneath it. */
+	private static final int BELOW_TAB_GAP = 2;
+
 	private static final int[] SPRITES = {
 		SpriteID.Banktabs.TAB, SpriteID.Banktabs.HOVERED, SpriteID.Banktabs.SELECTED,
 		SpriteID.SideiconsInterface._32,
@@ -201,8 +204,12 @@ public class GroupBankTabOverlay extends Overlay
 
 	/**
 	 * Where the viewer should appear the very first time it is opened, before the user has
-	 * dragged it anywhere. Prefers the left of the bank, and pins to the left edge of the
-	 * canvas when the bank is too wide to sit beside, which at least puts it somewhere
+	 * dragged it anywhere.
+	 * <p>
+	 * It prefers to hang just below the Group tab, left edges level, when that tab sits to
+	 * the right of the bank: the window then opens right under the tab that opened it, and
+	 * clear of the bank. When it does not fit there it goes to the left of the bank, and
+	 * failing that is pinned to the left edge of the canvas, which at least puts it somewhere
 	 * predictable and out of the way of the bank's own controls.
 	 * <p>
 	 * Reads the bank widget, so this must be called on the client thread.
@@ -217,6 +224,15 @@ public class GroupBankTabOverlay extends Overlay
 		{
 			return clamp((canvasWidth - windowWidth) / 2, (canvasHeight - windowHeight) / 2,
 				windowWidth, windowHeight, canvasWidth, canvasHeight);
+		}
+
+		Rectangle tab = place(bank);
+		int belowTabY = tab.y + tab.height + BELOW_TAB_GAP;
+		if (tab.x >= bank.x + bank.width
+			&& tab.x + windowWidth + SIDE_MARGIN <= canvasWidth
+			&& belowTabY + windowHeight + SIDE_MARGIN <= canvasHeight)
+		{
+			return new java.awt.Point(tab.x, belowTabY);
 		}
 
 		int left = bank.x - GAP - windowWidth;
