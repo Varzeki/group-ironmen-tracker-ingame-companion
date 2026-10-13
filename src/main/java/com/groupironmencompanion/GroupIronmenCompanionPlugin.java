@@ -364,6 +364,7 @@ public class GroupIronmenCompanionPlugin extends Plugin
 	@Subscribe
 	public void onGameStateChanged(GameStateChanged event)
 	{
+		inputState.setLoggedIn(event.getGameState() == GameState.LOGGED_IN);
 		if (event.getGameState() == GameState.LOGIN_SCREEN || event.getGameState() == GameState.HOPPING)
 		{
 			localPlayerName = null;
@@ -416,6 +417,7 @@ public class GroupIronmenCompanionPlugin extends Plugin
 	@Subscribe
 	public void onClientTick(ClientTick event)
 	{
+		inputState.setLoggedIn(client.getGameState() == GameState.LOGGED_IN);
 		inputState.setMenuOpen(client.isMenuOpen());
 	}
 

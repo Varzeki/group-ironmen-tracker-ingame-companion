@@ -46,7 +46,7 @@ public class GroupMapInput extends MouseAdapter
 	public MouseEvent mousePressed(MouseEvent event)
 	{
 		// While the game's right-click menu is open, a click is picking one of its options.
-		if (!config.mapPanel() || event.isAltDown() || inputState.isMenuOpen())
+		if (!config.mapPanel() || event.isAltDown() || !inputState.isLoggedIn() || inputState.isMenuOpen())
 		{
 			return event;
 		}
@@ -98,7 +98,7 @@ public class GroupMapInput extends MouseAdapter
 
 	private MouseEvent swallowOnRow(MouseEvent event)
 	{
-		if (config.mapPanel() && !event.isAltDown() && !inputState.isMenuOpen()
+		if (config.mapPanel() && !event.isAltDown() && inputState.isLoggedIn() && !inputState.isMenuOpen()
 			&& overlay.memberAt(event.getPoint()) != null)
 		{
 			event.consume();

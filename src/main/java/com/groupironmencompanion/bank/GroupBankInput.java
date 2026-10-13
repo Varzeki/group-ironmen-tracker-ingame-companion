@@ -60,7 +60,7 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 	@Override
 	public MouseEvent mousePressed(MouseEvent event)
 	{
-		if (!config.bankViewer())
+		if (!config.bankViewer() || !inputState.isLoggedIn())
 		{
 			return event;
 		}
@@ -188,8 +188,8 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 
 	private MouseEvent swallowInsideWindow(MouseEvent event)
 	{
-		if (config.bankViewer() && viewer.isOpen() && !event.isAltDown() && !inputState.isMenuOpen()
-			&& overlay.getHits().window.contains(event.getPoint()))
+		if (config.bankViewer() && viewer.isOpen() && !event.isAltDown() && inputState.isLoggedIn()
+			&& !inputState.isMenuOpen() && overlay.getHits().window.contains(event.getPoint()))
 		{
 			event.consume();
 		}
@@ -199,7 +199,7 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 	@Override
 	public MouseWheelEvent mouseWheelMoved(MouseWheelEvent event)
 	{
-		if (!config.bankViewer() || !viewer.isOpen())
+		if (!config.bankViewer() || !viewer.isOpen() || !inputState.isLoggedIn())
 		{
 			return event;
 		}
