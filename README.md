@@ -115,7 +115,7 @@ have anything to show.
 | --- | --- |
 | Connection | Group name, token, self-hosted server URL, refresh interval, offline threshold |
 | Side panel | Enable, show activity, show offline members, include yourself |
-| Group bank | Enable, hotkey, bank tab, open/close with the bank, item values, match interface theme |
+| Group bank | Enable, hotkey, bank tab, open/close with the bank, item values |
 | Skills tab | Enable hover, panel position, include yourself, include offline members |
 | World map | Enable markers, dungeon entrance markers, include offline members, member list, routing |
 | Status overlay | Enable, vitals, activity, offline members, include yourself |
