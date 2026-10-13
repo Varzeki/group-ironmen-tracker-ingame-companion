@@ -34,9 +34,9 @@ It only swallows clicks inside its own frame, so your own bank stays fully usabl
   breakdown of who is holding it.
 - A tab per member, split into Bank / Inventory / Equipment / Rune pouch / Seed vault /
   Quiver, plus a **Group Storage** tab.
-- Every tab is a bank tab tile with a small label. A member's tile shows the group ironman
-  helmet in that member's colour, the one their world map marker uses; hover a tile for
-  the full name.
+- Every tab is a bank tab tile. A member's tile shows the group ironman helmet in that
+  member's colour, the one their world map marker uses, above their name, and widens to fit
+  the name when there is room. Hover any tile for its name.
 - Click the search box and type to filter. `Esc` clears, then closes.
 - Alt-drag to move it, like any RuneLite overlay.
 - Drag any edge or corner of its frame to resize it, no Alt needed. It grows and shrinks in

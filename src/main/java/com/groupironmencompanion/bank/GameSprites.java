@@ -306,6 +306,40 @@ public class GameSprites
 	}
 
 	/**
+	 * Draws a sprite stretched across a wider box. Both ends are drawn as they are, the given
+	 * number of pixels each, and the middle is stretched between them, so a bevelled corner
+	 * keeps its shape. Only the width changes; a box no wider than the sprite draws it as is.
+	 */
+	void drawStretched(Graphics2D graphics, int id, int x, int y, int width, int endCap)
+	{
+		Sprite sprite = get(id);
+		if (sprite == null)
+		{
+			return;
+		}
+
+		BufferedImage image = sprite.image;
+		int imageWidth = image.getWidth();
+		int imageHeight = image.getHeight();
+		int extra = width - sprite.maxWidth;
+		if (extra <= 0 || imageWidth <= endCap * 2)
+		{
+			draw(graphics, id, x, y);
+			return;
+		}
+
+		int left = x + sprite.offsetX;
+		int right = left + imageWidth + extra;
+		int top = y + sprite.offsetY;
+		int bottom = top + imageHeight;
+		graphics.drawImage(image, left, top, left + endCap, bottom, 0, 0, endCap, imageHeight, null);
+		graphics.drawImage(image, left + endCap, top, right - endCap, bottom,
+			endCap, 0, imageWidth - endCap, imageHeight, null);
+		graphics.drawImage(image, right - endCap, top, right, bottom,
+			imageWidth - endCap, 0, imageWidth, imageHeight, null);
+	}
+
+	/**
 	 * Repeats a sprite across a rectangle, clipped to it, stepping by the sprite's box the way
 	 * the game tiles a sprite component.
 	 */

@@ -107,7 +107,8 @@ public class GroupBankOverlay extends Overlay
 	/** Space between the window's outer edge and the content, on the left and right. */
 	private static final int PADDING = 8;
 
-	// The tab strip: a row of the bank's own 41x40 tab tiles, each an icon over a small label.
+	// The tab strip: a row of the bank's own 41x40 tab tiles. Member tiles have a name under
+	// their icon and stretch wider to fit it.
 
 	/** A bank tab tile, and the space left between neighbouring tiles. */
 	private static final int TILE_WIDTH = 41;
@@ -122,18 +123,26 @@ public class GroupBankOverlay extends Overlay
 	private static final int TILE_ICON_WIDTH = 30;
 	private static final int TILE_ICON_HEIGHT = 24;
 
-	/** The label's baseline, measured up from the tile's bottom, and its side margins. */
+	/**
+	 * A member label's baseline, measured up from the tile's bottom; the least space kept
+	 * either side of it; and the space a tile is given either side of a name when there is
+	 * room for the whole name.
+	 */
 	private static final int TILE_LABEL_BOTTOM = 4;
 	private static final int TILE_LABEL_PADDING = 1;
+	private static final int MEMBER_LABEL_PADDING = 5;
+
+	/**
+	 * How much of each end of a tab tile sprite is kept as it is when a tile is stretched
+	 * wider, so its bevelled corner keeps its shape; the middle is stretched between them.
+	 */
+	private static final int TILE_END_CAP = 7;
 
 	/** The size of the colour swatch standing in for a member's helmet without sprites. */
 	private static final int FLAT_SWATCH = 14;
 
 	/** The group ironman helmet, recoloured per member. */
 	private static final int MEMBER_ICON = SpriteID.SideiconsInterface._32;
-
-	private static final String ALL_LABEL = "All";
-	private static final String STORAGE_LABEL = "Storage";
 
 	/** The search box below the tab strip, and the gap either side of it. */
 	private static final int SEARCH_GAP = 3;
@@ -217,7 +226,9 @@ public class GroupBankOverlay extends Overlay
 		columns = Math.max(MIN_COLUMNS, Math.min(maxColumns, columns));
 		int width = CHROME_WIDTH + columns * CELL_WIDTH;
 
-		int perRow = tilesPerRow(width);
+		// The tabs only wrap when even bank-tab-width tiles do not fit, so this matches the
+		// height of the strip as it is actually laid out.
+		int perRow = Math.max(1, (width - PADDING * 2 + TILE_GAP) / (TILE_WIDTH + TILE_GAP));
 		int strip = Math.max(1, (tabCount + perRow - 1) / perRow) * TILE_HEIGHT;
 		int chrome = heightFor(strip, 0);
 
@@ -520,9 +531,14 @@ public class GroupBankOverlay extends Overlay
 	// ------------------------------------------------------------------
 
 	/**
-	 * Arranges the tab strip: one row of the bank's own tab tiles, All and Group Storage first
-	 * and then a tile per member, wrapping onto further rows only when the window is too
-	 * narrow for them all.
+	 * Arranges the tab strip: All and Group Storage first, then a tile per member, in one row
+	 * of the bank's own tab tiles.
+	 * <p>
+	 * A member's tile is as wide as their name needs at the normal small font, never narrower
+	 * than a bank tab. When the row is wider than the window, the widest member tiles give
+	 * way first, back towards a bank tab's width, with their labels moving to smaller sizes
+	 * of the font and then being shortened to fit. Only when even plain bank-tab-width tiles
+	 * do not fit does the row wrap.
 	 * <p>
 	 * Tabs used to be drawn on a single strip, and anything past the right edge was simply
 	 * dropped. With a full group that silently swallowed the last tab, which is how the
@@ -535,65 +551,90 @@ public class GroupBankOverlay extends Overlay
 			return TabLayout.EMPTY;
 		}
 
-		List<String> ordered = new ArrayList<>(tabs.size());
+		List<String> fixed = new ArrayList<>();
+		List<String> members = new ArrayList<>();
 		for (String tab : tabs)
 		{
-			if (isFixedTab(tab))
-			{
-				ordered.add(tab);
-			}
-		}
-		for (String tab : tabs)
-		{
-			if (!isFixedTab(tab))
-			{
-				ordered.add(tab);
-			}
+			(isFixedTab(tab) ? fixed : members).add(tab);
 		}
 
-		int perRow = tilesPerRow(width);
-		List<TabSlot> slots = new ArrayList<>(ordered.size());
+		FontMetrics metrics = graphics.getFontMetrics(GameText.SMALL);
+		int[] natural = new int[members.size()];
+		int cap = TILE_WIDTH;
+		for (int i = 0; i < natural.length; i++)
+		{
+			natural[i] = Math.max(TILE_WIDTH, metrics.stringWidth(members.get(i)) + MEMBER_LABEL_PADDING * 2);
+			cap = Math.max(cap, natural[i]);
+		}
+
+		int available = width - PADDING * 2;
+		int memberRoom = available - fixed.size() * TILE_WIDTH - (tabs.size() - 1) * TILE_GAP;
+		while (cap > TILE_WIDTH && cappedTotal(natural, cap) > memberRoom)
+		{
+			cap--;
+		}
+
+		List<TabSlot> slots = new ArrayList<>(tabs.size());
+		if (cappedTotal(natural, cap) <= memberRoom)
+		{
+			int x = PADDING;
+			for (String tab : fixed)
+			{
+				slots.add(new TabSlot(tab, null, null, new Rectangle(x, CONTENT_TOP, TILE_WIDTH, TILE_HEIGHT)));
+				x += TILE_WIDTH + TILE_GAP;
+			}
+			for (int i = 0; i < members.size(); i++)
+			{
+				int tileWidth = Math.min(natural[i], cap);
+				slots.add(memberSlot(graphics, members.get(i), new Rectangle(x, CONTENT_TOP, tileWidth, TILE_HEIGHT)));
+				x += tileWidth + TILE_GAP;
+			}
+			return new TabLayout(Collections.unmodifiableList(slots), TILE_HEIGHT);
+		}
+
+		// Even bank-tab-width tiles do not fit across, so wrap them.
+		List<String> ordered = new ArrayList<>(fixed);
+		ordered.addAll(members);
+		int perRow = Math.max(1, (available + TILE_GAP) / (TILE_WIDTH + TILE_GAP));
 		for (int i = 0; i < ordered.size(); i++)
 		{
 			String tab = ordered.get(i);
-			int column = i % perRow;
-			int row = i / perRow;
-			Rectangle box = new Rectangle(PADDING + column * (TILE_WIDTH + TILE_GAP),
-				CONTENT_TOP + row * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT);
-			slots.add(fitLabel(graphics, tab, box));
+			Rectangle box = new Rectangle(PADDING + (i % perRow) * (TILE_WIDTH + TILE_GAP),
+				CONTENT_TOP + (i / perRow) * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT);
+			slots.add(isFixedTab(tab) ? new TabSlot(tab, null, null, box) : memberSlot(graphics, tab, box));
 		}
-
 		int rows = (ordered.size() + perRow - 1) / perRow;
 		return new TabLayout(Collections.unmodifiableList(slots), rows * TILE_HEIGHT);
 	}
 
-	/** How many tab tiles fit across a window this wide. */
-	private static int tilesPerRow(int width)
+	/** The total width of member tiles when none may be wider than the cap. */
+	private static int cappedTotal(int[] natural, int cap)
 	{
-		return Math.max(1, (width - PADDING * 2 + TILE_GAP) / (TILE_WIDTH + TILE_GAP));
+		int total = 0;
+		for (int width : natural)
+		{
+			total += Math.min(width, cap);
+		}
+		return total;
 	}
 
 	/**
-	 * Picks the label for a tile and the largest of the small fonts it fits in, shortening it
-	 * only if even the smallest is too wide. Worked out once per layout, not per frame.
+	 * A member's tile with its name fitted to it: the small font if it fits, then smaller
+	 * sizes of it, and only then shortened.
 	 */
-	private static TabSlot fitLabel(Graphics2D graphics, String tab, Rectangle box)
+	private static TabSlot memberSlot(Graphics2D graphics, String name, Rectangle box)
 	{
-		String text = GroupBankViewer.TAB_ALL.equals(tab) ? ALL_LABEL
-			: GroupBankViewer.TAB_SHARED.equals(tab) ? STORAGE_LABEL
-			: tab;
 		int room = box.width - TILE_LABEL_PADDING * 2;
-
 		for (Font font : GameText.LABEL_SIZES)
 		{
-			if (graphics.getFontMetrics(font).stringWidth(text) <= room)
+			if (graphics.getFontMetrics(font).stringWidth(name) <= room)
 			{
-				return new TabSlot(tab, text, font, box);
+				return new TabSlot(name, name, font, box);
 			}
 		}
 
 		Font smallest = GameText.LABEL_SIZES[GameText.LABEL_SIZES.length - 1];
-		return new TabSlot(tab, abbreviate(text, graphics.getFontMetrics(smallest), room), smallest, box);
+		return new TabSlot(name, abbreviate(name, graphics.getFontMetrics(smallest), room), smallest, box);
 	}
 
 	private static boolean isFixedTab(String tab)
@@ -620,15 +661,17 @@ public class GroupBankOverlay extends Overlay
 	}
 
 	/**
-	 * One of the bank's own tab tiles: an icon above a small label. All and Group Storage use
-	 * the bank's all-items and group storage icons; a member's tile is the group ironman
-	 * helmet in that member's colour, the colour their marker has on the world map. Hovering
-	 * a tile names it in full, as hovering a bank tab does.
+	 * One of the bank's own tab tiles. All and Group Storage carry just the bank's all-items
+	 * and group storage icons, as the bank's tabs do. A member's tile carries the group
+	 * ironman helmet in that member's colour, the colour their world map marker uses, over
+	 * their name; it is stretched wider for a long name. Hovering any tile names it in full,
+	 * as hovering a bank tab does.
 	 */
 	private void drawTile(Graphics2D graphics, TabSlot slot, boolean active, boolean hovered, boolean skinned)
 	{
 		Rectangle box = slot.box;
-		Color memberColour = memberColour(slot.tab);
+		boolean member = slot.label != null;
+		int fixedIcon = GroupBankViewer.TAB_ALL.equals(slot.tab) ? SpriteID.BanktabIcons.ALL_ITEMS : SpriteID.BankStorage._4;
 		int iconY = box.y + TILE_ICON_TOP;
 
 		if (skinned)
@@ -636,33 +679,50 @@ public class GroupBankOverlay extends Overlay
 			int tile = active ? SpriteID.Banktabs.SELECTED
 				: hovered ? SpriteID.Banktabs.HOVERED
 				: SpriteID.Banktabs.TAB;
-			sprites.draw(graphics, tile, box.x, box.y);
+			sprites.drawStretched(graphics, tile, box.x, box.y, box.width, TILE_END_CAP);
 
-			int icon = GroupBankViewer.TAB_ALL.equals(slot.tab) ? SpriteID.BanktabIcons.ALL_ITEMS
-				: GroupBankViewer.TAB_SHARED.equals(slot.tab) ? SpriteID.BankStorage._4
-				: MEMBER_ICON;
-			BufferedImage image = sprites.icon(icon, memberColour, TILE_ICON_WIDTH, TILE_ICON_HEIGHT);
-			if (image != null)
+			if (member)
 			{
-				graphics.drawImage(image, box.x + (box.width - image.getWidth()) / 2,
-					iconY + (TILE_ICON_HEIGHT - image.getHeight()) / 2, null);
+				BufferedImage image = sprites.icon(MEMBER_ICON, memberColour(slot.tab), TILE_ICON_WIDTH, TILE_ICON_HEIGHT);
+				if (image != null)
+				{
+					graphics.drawImage(image, box.x + (box.width - image.getWidth()) / 2,
+						iconY + (TILE_ICON_HEIGHT - image.getHeight()) / 2, null);
+				}
+			}
+			else
+			{
+				sprites.drawCentred(graphics, fixedIcon, box.x, box.y, box.width, box.height);
 			}
 		}
 		else
 		{
 			drawFlatTab(graphics, box, active, hovered);
-			if (memberColour != null)
+			if (member)
 			{
-				graphics.setColor(memberColour);
+				graphics.setColor(memberColour(slot.tab));
 				graphics.fillRect(box.x + (box.width - FLAT_SWATCH) / 2,
 					iconY + (TILE_ICON_HEIGHT - FLAT_SWATCH) / 2, FLAT_SWATCH, FLAT_SWATCH);
 			}
+			else
+			{
+				// Without the icon there would be nothing to tell the two apart.
+				graphics.setFont(GameText.SMALL);
+				FontMetrics small = graphics.getFontMetrics();
+				String label = GroupBankViewer.TAB_ALL.equals(slot.tab) ? "All" : "Storage";
+				GameText.drawShadowed(graphics, label, box.x + (box.width - small.stringWidth(label)) / 2,
+					GameText.centredBaseline(small, box.y, box.height),
+					active || hovered ? GameText.HOVER : GameText.ORANGE);
+			}
 		}
 
-		graphics.setFont(slot.font);
-		FontMetrics metrics = graphics.getFontMetrics();
-		GameText.drawShadowed(graphics, slot.label, box.x + (box.width - metrics.stringWidth(slot.label)) / 2,
-			box.y + box.height - TILE_LABEL_BOTTOM, active || hovered ? GameText.HOVER : GameText.ORANGE);
+		if (member)
+		{
+			graphics.setFont(slot.font);
+			FontMetrics metrics = graphics.getFontMetrics();
+			GameText.drawShadowed(graphics, slot.label, box.x + (box.width - metrics.stringWidth(slot.label)) / 2,
+				box.y + box.height - TILE_LABEL_BOTTOM, active || hovered ? GameText.HOVER : GameText.ORANGE);
+		}
 
 		if (hovered)
 		{
@@ -670,15 +730,10 @@ public class GroupBankOverlay extends Overlay
 		}
 	}
 
-	/** A member's colour, or null for the All and Group Storage tabs. */
-	@Nullable
-	private Color memberColour(String tab)
+	/** A member's colour, as used for their map marker and tooltip lines. */
+	private Color memberColour(String name)
 	{
-		if (isFixedTab(tab))
-		{
-			return null;
-		}
-		GroupMember member = groupState.getMember(tab);
+		GroupMember member = groupState.getMember(name);
 		return member != null ? member.getColour() : BankStyle.TEXT;
 	}
 
@@ -693,15 +748,20 @@ public class GroupBankOverlay extends Overlay
 		}
 	}
 
-	/** One tab's place in the strip and its fitted label, worked out before anything is drawn. */
+	/**
+	 * One tab's place in the strip, worked out before anything is drawn. Member tabs also
+	 * carry their fitted label and its font; the All and Group Storage tabs have neither.
+	 */
 	private static final class TabSlot
 	{
 		private final String tab;
+		@Nullable
 		private final String label;
+		@Nullable
 		private final Font font;
 		private final Rectangle box;
 
-		TabSlot(String tab, String label, Font font, Rectangle box)
+		TabSlot(String tab, @Nullable String label, @Nullable Font font, Rectangle box)
 		{
 			this.tab = tab;
 			this.label = label;
