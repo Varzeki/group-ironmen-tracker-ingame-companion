@@ -509,6 +509,11 @@ public class GroupIronmenCompanionPlugin extends Plugin
 				}
 				break;
 
+			case "natureRuneCost":
+				// The All tab's order and the footer total are worked out when rows are built.
+				bankViewer.markDirty();
+				break;
+
 			case "worldMapMarkers":
 			case "worldMapEntrances":
 			case "worldMapOffline":
