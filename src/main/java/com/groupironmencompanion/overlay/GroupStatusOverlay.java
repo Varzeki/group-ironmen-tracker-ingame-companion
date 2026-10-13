@@ -178,7 +178,7 @@ public class GroupStatusOverlay extends Overlay
 		{
 			right = member.getLastSeenText();
 		}
-		else if (config.statusShowWorld() && member.hasStats())
+		else if (member.hasStats())
 		{
 			right = "W" + member.getWorld();
 		}
@@ -219,7 +219,7 @@ public class GroupStatusOverlay extends Overlay
 			int activityBaseline = y + smallMetrics.getAscent();
 			if (paint)
 			{
-				String line = ellipsise(activity.describe(now, config.statusShowLocation()), smallMetrics, width);
+				String line = ellipsise(activity.describe(now, true), smallMetrics, width);
 				text(graphics, small, line, x, activityBaseline, ACTIVITY);
 			}
 			y = activityBaseline + smallMetrics.getDescent();

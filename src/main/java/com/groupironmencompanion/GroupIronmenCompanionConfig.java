@@ -489,47 +489,10 @@ public interface GroupIronmenCompanionConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "statusShowLocation",
-		name = "Show where members are",
-		description = "Say where each member is as part of what they are doing, e.g. \"at Catherby\".",
-		position = 6,
-		section = statusSection
-	)
-	default boolean statusShowLocation()
-	{
-		return true;
-	}
-
-	@ConfigItem(
-		keyName = "statusShowWorld",
-		name = "Show world",
-		description = "Show each member's world beside their name.",
-		position = 7,
-		section = statusSection
-	)
-	default boolean statusShowWorld()
-	{
-		return true;
-	}
-
-	@Range(min = 1, max = 60)
-	@ConfigItem(
-		keyName = "activityIdleMinutes",
-		name = "Idle after (minutes)",
-		description = "A member whose position, experience, items and interactions have not changed for this long is shown as idle, here and in the side panel.",
-		position = 8,
-		section = statusSection
-	)
-	default int activityIdleMinutes()
-	{
-		return 2;
-	}
-
-	@ConfigItem(
 		keyName = "statusBackdrop",
 		name = "Backdrop",
 		description = "Draw the overlay straight over the game, or on a translucent panel like other RuneLite overlays.",
-		position = 9,
+		position = 6,
 		section = statusSection
 	)
 	default StatusBackdrop statusBackdrop()

@@ -36,7 +36,7 @@ public class ActivityTracker
 	 */
 	private static final Duration BASELINE_GAP = ActivityRules.XP_WINDOW;
 
-	private static final int DEFAULT_IDLE_MINUTES = 2;
+	private static final int IDLE_MINUTES = 2;
 	private static final int DEFAULT_OFFLINE_MINUTES = 5;
 	private static final int DEFAULT_POLL_SECONDS = 3;
 
@@ -105,7 +105,7 @@ public class ActivityTracker
 		}
 		histories.keySet().retainAll(members.keySet());
 
-		ActivityRules.Context context = new ActivityRules.Context(idleMinutes(), offlineMinutes(), pollSeconds(),
+		ActivityRules.Context context = new ActivityRules.Context(IDLE_MINUTES, offlineMinutes(), pollSeconds(),
 			name -> isOtherMember(name, members), places);
 
 		Map<String, Activity> next = new HashMap<>();
@@ -147,11 +147,6 @@ public class ActivityTracker
 			}
 		}
 		return false;
-	}
-
-	private int idleMinutes()
-	{
-		return config == null ? DEFAULT_IDLE_MINUTES : config.activityIdleMinutes();
 	}
 
 	private int offlineMinutes()
