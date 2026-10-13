@@ -407,10 +407,17 @@ public class GroupIronmenCompanionPlugin extends Plugin
 
 		// Markers are rebuilt immediately whenever group data changes. This periodic pass
 		// only exists so members ageing into the offline threshold drop off on their own.
+		// The side panel's online state and "last seen" times age the same way.
 		if (++ticksSinceMapRefresh >= MAP_REFRESH_TICKS)
 		{
 			ticksSinceMapRefresh = 0;
 			mapMarkers.refresh();
+
+			GroupPanel current = panel;
+			if (current != null)
+			{
+				current.refreshMembersIfShown();
+			}
 		}
 	}
 

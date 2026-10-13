@@ -54,6 +54,9 @@ public class GroupPanel extends PluginPanel
 	{
 	};
 
+	/** The Group tab's rebuild, held once so {@link #refreshMembersIfShown} can recognise it. */
+	private final Runnable membersRefresh = this::refreshMembers;
+
 	public GroupPanel(GroupState groupState, GroupIronmenCompanionConfig config,
 		ItemManager itemManager, ClientThread clientThread)
 	{
@@ -91,7 +94,7 @@ public class GroupPanel extends PluginPanel
 		MaterialTab questsTab = new MaterialTab("Quests", tabs, questsView);
 		MaterialTab diariesTab = new MaterialTab("Diaries", tabs, diariesView);
 
-		groupTab.setOnSelectEvent(() -> select(this::refreshMembers));
+		groupTab.setOnSelectEvent(() -> select(membersRefresh));
 		itemsTab.setOnSelectEvent(() -> select(itemsView::refresh));
 		skillsTab.setOnSelectEvent(() -> select(skillsView::refresh));
 		questsTab.setOnSelectEvent(() -> select(questsView::refresh));
@@ -103,7 +106,7 @@ public class GroupPanel extends PluginPanel
 		tabs.addTab(questsTab);
 		tabs.addTab(diariesTab);
 		tabs.select(groupTab);
-		activeView = this::refreshMembers;
+		activeView = membersRefresh;
 
 		JPanel header = new JPanel(new BorderLayout());
 		header.setBackground(ColorScheme.DARK_GRAY_COLOR);
@@ -118,6 +121,22 @@ public class GroupPanel extends PluginPanel
 	public void refresh()
 	{
 		SwingUtilities.invokeLater(this::refreshOnEdt);
+	}
+
+	/**
+	 * Redraws the Group tab if it is the one on screen. Online state, "last seen" and the
+	 * activity line all age with the clock, so they need redrawing even when no new data
+	 * arrives. The other tabs only change with the data. Safe to call from any thread.
+	 */
+	public void refreshMembersIfShown()
+	{
+		SwingUtilities.invokeLater(() ->
+		{
+			if (activeView == membersRefresh)
+			{
+				refreshMembers();
+			}
+		});
 	}
 
 	public void setStatus(String status)
