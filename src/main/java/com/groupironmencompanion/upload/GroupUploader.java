@@ -56,6 +56,9 @@ public class GroupUploader
 	 */
 	private static final long QUEST_SCAN_MILLIS = 60_000;
 
+	/** How long to wait after a failed check or post before trying again. */
+	private static final long BACKOFF_MILLIS = 10_000;
+
 	private static final int INVENTORY_SIZE = 28;
 	private static final int EQUIPMENT_SIZE = 14;
 
@@ -90,7 +93,7 @@ public class GroupUploader
 	private int[] pendingSharedBank;
 	private boolean membershipConfirmed;
 	private String membershipCheckedFor;
-	private int backoffTicks;
+	private volatile long backoffUntil;
 
 	@Getter
 	private volatile boolean active;
@@ -111,7 +114,7 @@ public class GroupUploader
 		lastQuestScan = 0;
 		membershipConfirmed = false;
 		membershipCheckedFor = null;
-		backoffTicks = 0;
+		backoffUntil = 0;
 		active = false;
 		status = "Idle";
 	}
@@ -374,19 +377,28 @@ public class GroupUploader
 			return;
 		}
 
-		if (backoffTicks > 0)
+		// Timed rather than counted in flushes, which happen once per refresh interval, so
+		// the wait no longer stretches from seconds to minutes as that interval grows.
+		if (System.currentTimeMillis() < backoffUntil)
 		{
-			backoffTicks--;
 			return;
 		}
 
 		if (!membershipConfirmed || !playerName.equals(membershipCheckedFor))
 		{
-			if (!api.isPlayerInGroup(playerName))
+			Boolean member = api.isPlayerInGroup(playerName);
+			if (member == null)
+			{
+				status = "Could not reach the server, retrying shortly";
+				active = false;
+				backOff();
+				return;
+			}
+			if (!member)
 			{
 				status = "This character is not a member of the configured group";
 				active = false;
-				backoffTicks = 10;
+				backOff();
 				return;
 			}
 			membershipConfirmed = true;
@@ -417,7 +429,7 @@ public class GroupUploader
 			{
 				// Put the fields back so nothing is lost, without clobbering newer values.
 				restore(payload);
-				backoffTicks = 10;
+				backOff();
 			}
 		}
 		catch (GroupApi.NotAuthorisedException e)
@@ -425,8 +437,13 @@ public class GroupUploader
 			membershipConfirmed = false;
 			status = "The server rejected the group token";
 			active = false;
-			backoffTicks = 10;
+			backOff();
 		}
+	}
+
+	private void backOff()
+	{
+		backoffUntil = System.currentTimeMillis() + BACKOFF_MILLIS;
 	}
 
 	private void restore(Map<String, Object> payload)

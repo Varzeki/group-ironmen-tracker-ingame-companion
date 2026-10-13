@@ -1,7 +1,8 @@
 package com.groupironmencompanion.api;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonSyntaxException;
+import com.google.gson.JsonParseException;
+import com.google.gson.stream.MalformedJsonException;
 import com.groupironmencompanion.GroupIronmenCompanionConfig;
 import java.io.IOException;
 import java.io.InputStream;
@@ -240,8 +241,13 @@ public class GroupApi
 				new BoundedInputStream(body.byteStream(), MAX_RESPONSE_BYTES), StandardCharsets.UTF_8);
 			return gson.fromJson(reader, MemberDto[].class);
 		}
-		catch (JsonSyntaxException e)
+		catch (JsonParseException e)
 		{
+			if (isReadFailure(e))
+			{
+				log.debug("get-group-data failed while reading: {}", e.getCause().toString());
+				return null;
+			}
 			// Deliberately does not log the body: it is attacker-influenced and large.
 			log.warn("Group Ironmen Companion: the server response was not valid JSON");
 			return null;
@@ -253,8 +259,25 @@ public class GroupApi
 		}
 	}
 
-	/** Checks that the given character is a member of the configured group. */
-	public boolean isPlayerInGroup(String playerName)
+	/**
+	 * Gson reports a failed read as a parse error, so a timeout or the size cap tripping
+	 * partway through the body arrives as one too. Those are network trouble, not bad JSON.
+	 */
+	private static boolean isReadFailure(JsonParseException e)
+	{
+		Throwable cause = e.getCause();
+		return cause instanceof IOException && !(cause instanceof MalformedJsonException);
+	}
+
+	/**
+	 * Checks that the given character is a member of the configured group.
+	 *
+	 * @return true for a member; false when the server says they are not, which it also
+	 *         says for a rejected token; null when there is no answer, because the server
+	 *         could not be reached or failed
+	 */
+	@Nullable
+	public Boolean isPlayerInGroup(String playerName)
 	{
 		String groupName = getGroupName();
 		String token = getGroupToken();
@@ -266,18 +289,27 @@ public class GroupApi
 		HttpUrl.Builder builder = endpoint(groupName, "am-i-in-group");
 		if (builder == null)
 		{
-			return false;
+			return null;
 		}
 		HttpUrl url = builder.addQueryParameter("member_name", playerName).build();
 
 		try (Response response = client().newCall(authorised(url, token).get().build()).execute())
 		{
-			return response.isSuccessful();
+			if (response.isSuccessful())
+			{
+				return true;
+			}
+			if (response.code() == 401 || response.code() == 403)
+			{
+				return false;
+			}
+			log.debug("am-i-in-group returned {}", response.code());
+			return null;
 		}
 		catch (IOException e)
 		{
 			log.debug("am-i-in-group failed: {}", e.toString());
-			return false;
+			return null;
 		}
 	}
 
