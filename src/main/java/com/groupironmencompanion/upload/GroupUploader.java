@@ -49,6 +49,13 @@ public class GroupUploader
 	/** Interface group of the group storage loading screen, used to detect a committed save. */
 	private static final int GROUP_STORAGE_LOADER = 293;
 
+	/**
+	 * Least time between quest scans. A scan asks the game for the state of every quest, a
+	 * script run each, so it is not repeated on every tick that vars change. The official
+	 * tracker scans on the same interval.
+	 */
+	private static final long QUEST_SCAN_MILLIS = 60_000;
+
 	private static final int INVENTORY_SIZE = 28;
 	private static final int EQUIPMENT_SIZE = 14;
 
@@ -78,6 +85,8 @@ public class GroupUploader
 	private final Map<String, String> lastSent = new ConcurrentHashMap<>();
 
 	private int[] sortedQuestIds;
+	private boolean questsChanged = true;
+	private long lastQuestScan;
 	private int[] pendingSharedBank;
 	private boolean membershipConfirmed;
 	private String membershipCheckedFor;
@@ -97,6 +106,9 @@ public class GroupUploader
 		}
 		lastSent.clear();
 		pendingSharedBank = null;
+		// Scan quests on the next tick, such as the first after a login, then at most once a minute.
+		questsChanged = true;
+		lastQuestScan = 0;
 		membershipConfirmed = false;
 		membershipCheckedFor = null;
 		backoffTicks = 0;
@@ -231,14 +243,25 @@ public class GroupUploader
 
 		stageRunePouch();
 		stageInteracting();
+		stageQuests();
 	}
 
+	/** Notes that quest progress may have changed. The scan itself runs from {@link #onGameTick}. */
 	public void onQuestsChanged()
 	{
-		if (!collectable())
+		questsChanged = true;
+	}
+
+	private void stageQuests()
+	{
+		long now = System.currentTimeMillis();
+		if (!questsChanged || (lastQuestScan != 0 && now - lastQuestScan < QUEST_SCAN_MILLIS))
 		{
 			return;
 		}
+		questsChanged = false;
+		lastQuestScan = now;
+
 		if (sortedQuestIds == null)
 		{
 			sortedQuestIds = Arrays.stream(Quest.values())
