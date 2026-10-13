@@ -169,7 +169,7 @@ public interface GroupIronmenCompanionConfig extends Config
 	@ConfigItem(
 		keyName = "panelShowActivity",
 		name = "Show what members are doing",
-		description = "Include the NPC each member is interacting with, and its remaining health. Informational only; never drawn in the game scene.",
+		description = "A best guess at what each member is doing and where, worked out from the experience, position, items, quests and interactions their tracker shares. It can be wrong: the tracker shares no activity of its own. Never drawn in the game scene.",
 		position = 1,
 		section = panelSection
 	)

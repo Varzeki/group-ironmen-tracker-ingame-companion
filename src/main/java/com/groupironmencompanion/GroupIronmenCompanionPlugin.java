@@ -1,6 +1,7 @@
 package com.groupironmencompanion;
 
 import com.google.inject.Provides;
+import com.groupironmencompanion.activity.ActivityTracker;
 import com.groupironmencompanion.api.GroupApi;
 import com.groupironmencompanion.api.MemberDto;
 import com.groupironmencompanion.bank.GroupBankInput;
@@ -144,6 +145,9 @@ public class GroupIronmenCompanionPlugin extends Plugin
 
 	@Inject
 	private GroupStatusOverlay statusOverlay;
+
+	@Inject
+	private ActivityTracker activityTracker;
 
 	private GroupPanel panel;
 	private NavigationButton navButton;
@@ -525,7 +529,7 @@ public class GroupIronmenCompanionPlugin extends Plugin
 			return;
 		}
 
-		panel = new GroupPanel(groupState, config, itemManager, clientThread);
+		panel = new GroupPanel(groupState, config, activityTracker, itemManager, clientThread);
 		navButton = NavigationButton.builder()
 			.tooltip("Group Ironmen Tracker In-Game Companion")
 			.icon(buildIcon())

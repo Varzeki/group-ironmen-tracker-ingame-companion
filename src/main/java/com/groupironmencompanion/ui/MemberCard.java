@@ -1,10 +1,12 @@
 package com.groupironmencompanion.ui;
 
+import com.groupironmencompanion.activity.Activity;
 import com.groupironmencompanion.data.GroupMember;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.GridLayout;
+import java.time.Instant;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JLabel;
@@ -16,7 +18,7 @@ import net.runelite.client.ui.components.ThinProgressBar;
 
 /**
  * One group member's live vitals: hitpoints, prayer, run energy, world, how long ago their
- * client last reported, and optionally what they are interacting with.
+ * client last reported, and optionally a best guess at what they are doing.
  */
 class MemberCard extends JPanel
 {
@@ -65,6 +67,8 @@ class MemberCard extends JPanel
 
 		activityLabel.setFont(FontManager.getRunescapeSmallFont());
 		activityLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+		activityLabel.setToolTipText("A best guess from the experience, position, items, quests and "
+			+ "interactions their tracker shares. It can be wrong.");
 
 		add(header, BorderLayout.NORTH);
 		add(bars, BorderLayout.CENTER);
@@ -99,7 +103,11 @@ class MemberCard extends JPanel
 		return wrapper;
 	}
 
-	void update(GroupMember member, boolean online, boolean showActivity, boolean isYou)
+	/**
+	 * @param activity what they seem to be doing, or null to hide the line
+	 * @param now the time to count an idle spell to
+	 */
+	void update(GroupMember member, boolean online, Activity activity, Instant now, boolean isYou)
 	{
 		nameLabel.setText(isYou ? member.getName() + " (you)" : member.getName());
 		nameLabel.setForeground(online ? member.getColour() : OFFLINE_COLOUR);
@@ -126,12 +134,10 @@ class MemberCard extends JPanel
 			setBar(run, runText, -1, -1, online, true);
 		}
 
-		GroupMember.Interaction interaction = member.getInteraction();
-		if (online && showActivity && interaction != null && !interaction.isStale())
+		if (activity != null)
 		{
-			int health = interaction.getHealthPercent();
-			activityLabel.setText("vs " + interaction.getName()
-				+ (health >= 0 ? " (" + health + "%)" : ""));
+			activityLabel.setText(activity.describe(now, true));
+			activityLabel.setForeground(online ? ColorScheme.LIGHT_GRAY_COLOR : OFFLINE_COLOUR);
 			activityLabel.setVisible(true);
 		}
 		else
