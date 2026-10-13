@@ -139,6 +139,24 @@ public class GroupStateTest
 	}
 
 	@Test
+	public void theNewestMemberRepeatedByTheInclusiveCursorIsNotAChange()
+	{
+		GroupState state = new GroupState();
+		MemberDto first = updatedAt("Alice", "2026-10-13T11:24:54.063221Z");
+		first.skills = new int[]{1, 2, 3};
+		assertTrue(state.applyUpdate(new MemberDto[]{first}));
+
+		// from_time is inclusive, so the next poll hands back the same fields again.
+		MemberDto again = updatedAt("Alice", "2026-10-13T11:24:54.063221Z");
+		again.skills = new int[]{1, 2, 3};
+		assertFalse(state.applyUpdate(new MemberDto[]{again}));
+
+		MemberDto newer = updatedAt("Alice", "2026-10-13T11:25:00Z");
+		newer.skills = new int[]{1, 2, 4};
+		assertTrue(state.applyUpdate(new MemberDto[]{newer}));
+	}
+
+	@Test
 	public void theCursorNeverMovesBackwards()
 	{
 		GroupState state = new GroupState();

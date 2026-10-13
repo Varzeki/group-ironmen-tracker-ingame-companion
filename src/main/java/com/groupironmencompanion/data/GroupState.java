@@ -268,9 +268,18 @@ public class GroupState
 				membershipChanged = true;
 			}
 			GroupMember member = members.computeIfAbsent(dto.name, GroupMember::new);
-			changed |= merge(member, dto);
-
 			Instant updated = parseInstant(dto.last_updated);
+
+			// from_time is inclusive, so the newest member's latest fields come back on every
+			// poll. Their update time says whether there is anything new: the response that
+			// set it carried every field up to it. Merging the repeat anyway made every poll a
+			// change, and every listener rebuilt the bank, panel and map each refresh.
+			boolean repeat = updated != null && updated.equals(member.getLastUpdated());
+			if (!repeat)
+			{
+				changed |= merge(member, dto);
+			}
+
 			if (updated != null)
 			{
 				member.setLastUpdated(updated);
