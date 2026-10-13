@@ -117,6 +117,9 @@ bar, so this plugin is built to stay clearly inside
 - **No menu entries.** The plugin never calls `createMenuEntry` or `Overlay.addMenuEntry`.
   Nothing it draws can cause an action to be sent to the server, which is the guidelines'
   actual prohibition on menus. Everything clickable belongs to the plugin's own overlays.
+  While the mouse is over the group bank window or its Group tab, the game's own options for
+  whatever is behind the window are removed, leaving only Cancel, so the window never shows
+  or offers actions on the scene behind it. Nothing is ever added.
 - **No interface modification.** No game widget is created, hidden, unhidden, reparented,
   moved or resized, and no click zone is changed. Game widgets are read for their on-screen
   bounds only - to know which skill the mouse is over, and where the bank window sits so the

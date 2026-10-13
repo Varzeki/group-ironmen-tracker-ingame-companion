@@ -29,11 +29,15 @@ import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
+import net.runelite.api.Menu;
+import net.runelite.api.MenuAction;
+import net.runelite.api.MenuEntry;
 import net.runelite.api.Player;
 import net.runelite.api.events.ClientTick;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.ItemContainerChanged;
+import net.runelite.api.events.PostMenuSort;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.events.WidgetClosed;
@@ -428,6 +432,53 @@ public class GroupIronmenCompanionPlugin extends Plugin
 	{
 		inputState.setLoggedIn(client.getGameState() == GameState.LOGGED_IN);
 		inputState.setMenuOpen(client.isMenuOpen());
+	}
+
+	/**
+	 * Leaves only Cancel in the game's menu while the mouse is over the group bank window or
+	 * its Group tab. The game builds its menu from whatever is under the mouse in the scene,
+	 * so without this, hovering an item in the window showed "Enter Portal" or "Walk here"
+	 * for whatever stood behind it, and a right-click offered those options. Nothing is ever
+	 * added, and nothing changes while the menu is open or the mouse is anywhere else.
+	 */
+	@Subscribe
+	public void onPostMenuSort(PostMenuSort event)
+	{
+		if (client.isMenuOpen())
+		{
+			return;
+		}
+		net.runelite.api.Point mouse = client.getMouseCanvasPosition();
+		if (mouse == null || !bankInput.covers(new java.awt.Point(mouse.getX(), mouse.getY())))
+		{
+			return;
+		}
+
+		Menu menu = client.getMenu();
+		MenuEntry[] entries = menu.getMenuEntries();
+		int kept = 0;
+		for (MenuEntry entry : entries)
+		{
+			if (entry.getType() == MenuAction.CANCEL)
+			{
+				kept++;
+			}
+		}
+		if (kept == entries.length)
+		{
+			return;
+		}
+
+		MenuEntry[] cancelOnly = new MenuEntry[kept];
+		int i = 0;
+		for (MenuEntry entry : entries)
+		{
+			if (entry.getType() == MenuAction.CANCEL)
+			{
+				cancelOnly[i++] = entry;
+			}
+		}
+		menu.setMenuEntries(cancelOnly);
 	}
 
 	@Subscribe

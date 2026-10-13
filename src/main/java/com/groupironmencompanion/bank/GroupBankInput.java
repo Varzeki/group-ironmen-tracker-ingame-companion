@@ -208,6 +208,24 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 		return event;
 	}
 
+	/**
+	 * Whether a canvas point is on the group bank window or its Group tab, where the game's own
+	 * menu options for whatever lies behind them must not show.
+	 */
+	public boolean covers(java.awt.Point point)
+	{
+		if (!config.bankViewer() || !inputState.isLoggedIn())
+		{
+			return false;
+		}
+		Rectangle tab = tabOverlay.getHit();
+		if (tab != null && tab.contains(point))
+		{
+			return true;
+		}
+		return viewer.isOpen() && overlay.getHits().window.contains(point);
+	}
+
 	/** Swallows a press, remembering its button so the matching release is swallowed too. */
 	private void swallow(MouseEvent event)
 	{

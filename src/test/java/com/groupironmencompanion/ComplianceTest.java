@@ -83,10 +83,12 @@ public class ComplianceTest
 	public void addsNoMenuEntries() throws IOException
 	{
 		// Jagex prohibit "any addition of new menu entries which cause actions to be sent to
-		// the server". The plugin sidesteps the question entirely by creating none at all.
-		assertAbsent("This plugin must never create a menu entry.",
-			"createMenuEntry", "addMenuEntry", "MenuEntry", "MenuAction", "invokeMenuAction",
-			"setMenuOptions", "getMenuEntries");
+		// the server". The plugin sidesteps the question entirely by creating none at all. The
+		// one place it touches the menu, while the mouse is over the group bank window, only
+		// removes the scene's options so nothing behind the window can be acted on.
+		assertAbsent("This plugin must never create or invoke a menu entry.",
+			"createMenuEntry", "addMenuEntry", "invokeMenuAction", "menuAction(", "setMenuOptions",
+			"setOption(", "setTarget(", "setType(", "onClick(");
 	}
 
 	@Test
