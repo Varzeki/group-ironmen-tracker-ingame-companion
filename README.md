@@ -132,7 +132,7 @@ have anything to show.
 | Group bank | Enable, hotkey, bank tab, open/close with the bank, item values |
 | Skills tab | Enable hover, panel position, include yourself, include offline members |
 | World map | Enable markers, dungeon entrance markers, include offline members, member list, routing |
-| Status overlay | Enable, vitals bars, what members are doing, offline members, include yourself, numbers on or beside the bars, show where members are, show world, idle threshold, backdrop |
+| Status overlay | Enable, vitals bars, what members are doing, offline members, include yourself, numbers on or beside the bars, backdrop |
 | Member colours | One colour per member, assigned alphabetically |
 | Data sharing | Whether to upload your own data when the tracker plugin is absent |
 
@@ -202,9 +202,7 @@ name in the tooltip, just no entrance marker.
 
 Place names combine the region list from
 [Location Display](https://github.com/trinhc2/Location-Display) by trinhc2 (BSD 2-Clause)
-with the world map's own labels from the game cache. The lookup and the bundled
-`places.gz` are ported from [Golems Don't Die](https://github.com/Varzeki/golems-dont-die)
-by Varzeki (BSD 2-Clause), which also has the generator. Region ids for the instances the map
+with the world map's own labels from the game cache. Region ids for the instances the map
 labels name badly come from RuneLite's Discord plugin.
 
 ## Not implemented
