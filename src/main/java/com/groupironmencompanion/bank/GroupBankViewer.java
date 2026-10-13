@@ -189,7 +189,9 @@ public class GroupBankViewer
 		visibleItemCount = count;
 		visibleValue = value;
 
-		int maxScroll = Math.max(0, rows.size() - 1);
+		// The same limit the wheel and the scrollbar use. Clamping to the last row instead left
+		// a shrunk list scrolled to a nearly empty page with the thumb off the end of its track.
+		int maxScroll = Math.max(0, rows.size() - GroupBankOverlay.VISIBLE_ROWS);
 		if (scrollRow > maxScroll)
 		{
 			scrollRow = maxScroll;
