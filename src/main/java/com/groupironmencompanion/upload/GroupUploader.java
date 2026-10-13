@@ -25,7 +25,9 @@ import net.runelite.api.Player;
 import net.runelite.api.Quest;
 import net.runelite.api.QuestState;
 import net.runelite.api.Skill;
+import net.runelite.api.WorldEntity;
 import net.runelite.api.WorldType;
+import net.runelite.api.WorldView;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.InventoryID;
 import net.runelite.api.gameval.VarbitID;
@@ -155,12 +157,12 @@ public class GroupUploader
 			return;
 		}
 		Player local = client.getLocalPlayer();
-		WorldPoint point = WorldPoint.fromLocalInstance(client, local.getLocalLocation());
+		WorldPoint point = realLocation(local);
 		if (point == null)
 		{
 			return;
 		}
-		stage("coordinates", new int[]{point.getX(), point.getY(), point.getPlane(), 0});
+		stage("coordinates", UploadPayloads.coordinates(point, isOnBoat(local)));
 	}
 
 	public void onItemContainerChanged(int containerId, @Nullable ItemContainer container)
@@ -302,7 +304,7 @@ public class GroupUploader
 			return;
 		}
 
-		WorldPoint point = WorldPoint.fromLocalInstance(client, target.getLocalLocation());
+		WorldPoint point = realLocation(target);
 		UploadPayloads.Coordinates location = point == null
 			? new UploadPayloads.Coordinates(0, 0, 0)
 			: new UploadPayloads.Coordinates(point.getX(), point.getY(), point.getPlane());
@@ -403,6 +405,32 @@ public class GroupUploader
 	// ------------------------------------------------------------------
 	// Helpers
 	// ------------------------------------------------------------------
+
+	/** True while the actor stands on a boat, which has a world view of its own. */
+	private static boolean isOnBoat(Actor actor)
+	{
+		WorldView view = actor.getWorldView();
+		return view != null && !view.isTopLevel();
+	}
+
+	/**
+	 * Where an actor is in the real world.
+	 * <p>
+	 * A boat is its own world view, built from a template somewhere else in the world, so
+	 * converting a position on deck gives a tile nowhere near the sea. While aboard, the
+	 * boat's own position in the top-level world is the real one. This is the same
+	 * conversion the official tracker plugin makes.
+	 */
+	@Nullable
+	private WorldPoint realLocation(Actor actor)
+	{
+		if (!isOnBoat(actor))
+		{
+			return WorldPoint.fromLocalInstance(client, actor.getLocalLocation());
+		}
+		WorldEntity boat = client.getTopLevelWorldView().worldEntities().byIndex(actor.getWorldView().getId());
+		return boat == null ? null : WorldPoint.fromLocalInstance(client, boat.getLocalLocation());
+	}
 
 	private boolean collectable()
 	{
