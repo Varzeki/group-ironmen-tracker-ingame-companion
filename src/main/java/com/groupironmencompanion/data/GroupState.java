@@ -1,5 +1,6 @@
 package com.groupironmencompanion.data;
 
+import com.groupironmencompanion.activity.ActivityTracker;
 import com.groupironmencompanion.api.MemberDto;
 import java.awt.Color;
 import java.time.Instant;
@@ -15,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
+import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.coords.WorldPoint;
@@ -50,6 +52,21 @@ public class GroupState
 	private volatile Color[] palette = new Color[0];
 	private volatile String localPlayerName;
 
+	/** Guesses what each member is doing from what changes between polls. */
+	private final ActivityTracker activity;
+
+	@Inject
+	public GroupState(ActivityTracker activity)
+	{
+		this.activity = activity;
+	}
+
+	/** A state with no place names, for tests. */
+	public GroupState()
+	{
+		this(new ActivityTracker(null, point -> null));
+	}
+
 	public void addListener(Runnable listener)
 	{
 		listeners.add(listener);
@@ -71,6 +88,7 @@ public class GroupState
 		rebuildMemberList();
 		fromTime.set(EPOCH);
 		fromInstant.set(Instant.EPOCH);
+		activity.reset();
 		fireChanged();
 	}
 
@@ -263,6 +281,10 @@ public class GroupState
 		{
 			rebuildMemberList();
 		}
+
+		// Every response, changed or not, so guesses that only last a moment can expire.
+		activity.update(response, members);
+
 		if (changed || membershipChanged)
 		{
 			assignColours();

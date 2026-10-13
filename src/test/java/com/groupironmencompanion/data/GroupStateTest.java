@@ -1,11 +1,15 @@
 package com.groupironmencompanion.data;
 
+import com.groupironmencompanion.activity.Activity;
+import com.groupironmencompanion.activity.ActivityTracker;
 import com.groupironmencompanion.api.MemberDto;
+import java.time.Instant;
 import java.util.List;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
@@ -113,5 +117,29 @@ public class GroupStateTest
 
 		state.applyUpdate(new MemberDto[]{member("alice", null)});
 		assertEquals(1, state.getMembers().size());
+	}
+
+	@Test
+	public void everyResponseFeedsTheActivityTrackerAndAResetClearsIt()
+	{
+		ActivityTracker activity = new ActivityTracker(null, point -> null);
+		GroupState state = new GroupState(activity);
+
+		MemberDto first = member("alice", new int[]{100, 200});
+		first.last_updated = Instant.now().toString();
+		state.applyUpdate(new MemberDto[]{first, member("@SHARED", null)});
+
+		MemberDto second = member("alice", new int[]{150, 200});
+		second.last_updated = Instant.now().toString();
+		state.applyUpdate(new MemberDto[]{second, member("@SHARED", null)});
+
+		Activity alice = activity.get("alice");
+		assertNotNull(alice);
+		assertEquals(Activity.Kind.SKILLING, alice.getKind());
+		assertEquals("Agility", alice.describe(Instant.now(), false));
+		assertNull("group storage is not a person", activity.get("@SHARED"));
+
+		state.reset();
+		assertNull(activity.get("alice"));
 	}
 }
