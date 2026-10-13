@@ -361,6 +361,22 @@ public class GroupUploader
 	// ------------------------------------------------------------------
 
 	/** Posts everything staged since the last call. Must not run on the client thread. */
+	/**
+	 * Drops what is staged and what was last sent, and nothing else. Safe from the polling
+	 * thread: the rest of {@link #reset} is client thread state, such as a group storage
+	 * save in progress, which must not be cleared from under it every poll.
+	 */
+	private void discardStaged()
+	{
+		synchronized (pending)
+		{
+			pending.clear();
+		}
+		lastSent.clear();
+		membershipConfirmed = false;
+		active = false;
+	}
+
 	public void flush(String playerName)
 	{
 		if (!shouldUpload())
@@ -368,7 +384,7 @@ public class GroupUploader
 			// Nothing new is staged while the tracker uploads, but what was staged before it
 			// took over is stale, and the tracker may since have posted values that lastSent
 			// would wrongly suppress. Start clean whenever this plugin takes over again.
-			reset();
+			discardStaged();
 			return;
 		}
 		if (playerName == null)
