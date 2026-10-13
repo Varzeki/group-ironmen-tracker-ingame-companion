@@ -16,7 +16,11 @@ back to collecting that data itself when that plugin is not running.
 Every feature below can be switched off on its own in the plugin settings.
 
 **Group bank** - a read-only, searchable window showing everything the group owns.
-`Ctrl+G` by default, or click the small **Group** tab that appears beside your bank.
+`Ctrl+G` by default, or click the **Group** tab (a bank tab with the group ironman helmet)
+that appears beside your bank.
+
+It looks like the bank it sits next to: it is drawn from the bank's own frame, tab, button
+and scrollbar sprites, in the game's own fonts, with items at the bank's spacing.
 
 The first time you open it, it places itself to the left of the bank, or against the left
 edge of the screen when the bank is too wide to sit beside (which it always is in fixed
@@ -28,9 +32,13 @@ It only swallows clicks inside its own frame, so your own bank stays fully usabl
 - An **All** tab totalling every item across the group, sorted by value, with a hover
   breakdown of who is holding it.
 - A tab per member, split into Bank / Inventory / Equipment / Rune pouch / Seed vault /
-  Quiver, plus a **Shared** tab for the group storage.
+  Quiver, plus a **Group Storage** tab.
 - Click the search box and type to filter. `Esc` clears, then closes.
 - Alt-drag to move it, like any RuneLite overlay.
+- **Themes:** it follows interface reskins from the Resource Packs plugin and RuneLite's
+  Interface Styles, including the bank's line colours, and the map list, skills panel and
+  tooltips take RuneLite's overlay colour. Turn off **Match interface theme** for the plain
+  game look.
 
 **Group levels on the Skills tab** - hover any skill and a panel lists every member's level,
 experience and experience to the next level, each in that member's colour. The panel is
@@ -100,7 +108,7 @@ have anything to show.
 | --- | --- |
 | Connection | Group name, token, self-hosted server URL, refresh interval, offline threshold |
 | Side panel | Enable, show activity, show offline members, include yourself |
-| Group bank | Enable, hotkey, bank tab, open/close with the bank, item values |
+| Group bank | Enable, hotkey, bank tab, open/close with the bank, item values, match interface theme |
 | Skills tab | Enable hover, panel position, include yourself, include offline members |
 | World map | Enable markers, dungeon entrance markers, include offline members, member list, routing |
 | Status overlay | Enable, vitals, activity, offline members, include yourself |
@@ -118,9 +126,12 @@ bar, so this plugin is built to stay clearly inside
   Nothing it draws can cause an action to be sent to the server, which is the guidelines'
   actual prohibition on menus. Everything clickable belongs to the plugin's own overlays.
 - **No interface modification.** No game widget is created, hidden, unhidden, reparented,
-  moved or resized, and no click zone is changed. Game widgets are read for their on-screen
-  bounds only - to know which skill the mouse is over, and where the bank window sits so the
-  Group tab can be drawn *outside* it. Every view is the plugin's own drawing.
+  moved, resized or recoloured, and no click zone is changed. Game widgets are only read -
+  for their on-screen bounds, to know which skill the mouse is over and where the bank window
+  sits so the Group tab can be drawn *outside* it, and for the colour of the bank's separator
+  line, so the group bank can match a recoloured bank. Every view is the plugin's own drawing.
+  The game's sprites, and any interface reskin's replacements for them, are only read, to
+  draw those views in the bank's style; nothing is ever written to them.
 - **Read-only by construction.** The plugin only ever holds item ids and quantities read back
   from your group's server. There is no code path that could withdraw, deposit or use
   anything.

@@ -96,14 +96,19 @@ public class ComplianceTest
 		// Widgets are read for their bounds only; nothing about them is ever written.
 		assertAbsent("This plugin must never modify, hide, unhide, resize or reparent a game widget.",
 			"setHidden", "createChild", "setOriginalX", "setOriginalY", "setOriginalWidth",
-			"setOriginalHeight", "deleteAllChildren", "setOnOpListener", "setItemId");
+			"setOriginalHeight", "deleteAllChildren", "setOnOpListener", "setItemId",
+			"setTextColor", "setSpriteId");
 	}
 
 	@Test
 	public void neverWritesClientState() throws IOException
 	{
+		// Sprite overrides are how interface reskins work. The group bank reads them to match
+		// a reskinned bank, and must never add, replace or remove one itself.
 		assertAbsent("This plugin is read-only with respect to the game client.",
-			"setVarbit", "setVarp", "runScript", "client.set");
+			"setVarbit", "setVarp", "runScript", "client.set", "getWidgetSpriteOverrides",
+			"overrides.put", "overrides.remove", "overrides.clear", "getSpriteOverrides().put",
+			"getSpriteOverrides().remove", "getSpriteOverrides().clear");
 	}
 
 	@Test
