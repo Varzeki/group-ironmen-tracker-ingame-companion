@@ -283,10 +283,12 @@ public class GroupIronmenCompanionPlugin extends Plugin
 
 			try
 			{
+				// Noted before the cursor, so a reset between the two reads still drops the reply.
+				int generation = groupState.getGeneration();
 				MemberDto[] response = api.getGroupData(groupState.getFromTime());
 				if (response != null)
 				{
-					groupState.applyUpdate(response);
+					groupState.applyUpdate(response, generation);
 					setStatus(describeConnection());
 				}
 			}

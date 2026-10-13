@@ -50,6 +50,13 @@ public class GroupState
 	private volatile Color[] palette = new Color[0];
 	private volatile String localPlayerName;
 
+	/**
+	 * Bumped by every {@link #reset}. A poll notes it before its request goes out, so a
+	 * response that was already in flight when the state was reset, for a group that is no
+	 * longer configured, can be recognised and dropped instead of being merged back in.
+	 */
+	private volatile int generation;
+
 	public void addListener(Runnable listener)
 	{
 		listeners.add(listener);
@@ -65,8 +72,15 @@ public class GroupState
 		return fromTime.get();
 	}
 
-	public void reset()
+	/** Read before a request is made, and handed back with its response to {@link #applyUpdate}. */
+	public int getGeneration()
 	{
+		return generation;
+	}
+
+	public synchronized void reset()
+	{
+		generation++;
 		members.clear();
 		rebuildMemberList();
 		fromTime.set(EPOCH);
@@ -199,14 +213,24 @@ public class GroupState
 	// Writing
 	// ------------------------------------------------------------------
 
-	/**
-	 * Merges one {@code get-group-data} response and advances the poll cursor.
-	 *
-	 * @return true when anything changed and the UI should redraw
-	 */
+	/** Merges a response to a request made under the current generation. */
 	public boolean applyUpdate(MemberDto[] response)
 	{
-		if (response == null)
+		return applyUpdate(response, generation);
+	}
+
+	/**
+	 * Merges one {@code get-group-data} response and advances the poll cursor.
+	 * <p>
+	 * Synchronised with {@link #reset} so a reset cannot land halfway through a merge.
+	 *
+	 * @param requestGeneration {@link #getGeneration} as it was when the request was made; a
+	 *                          response from before the last reset is ignored
+	 * @return true when anything changed and the UI should redraw
+	 */
+	public synchronized boolean applyUpdate(MemberDto[] response, int requestGeneration)
+	{
+		if (response == null || requestGeneration != generation)
 		{
 			return false;
 		}

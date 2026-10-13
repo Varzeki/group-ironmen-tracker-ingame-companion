@@ -5,6 +5,7 @@ import java.util.List;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -102,6 +103,55 @@ public class GroupStateTest
 	{
 		assertTrue(GroupState.namesMatch("Rat von Hat", "Rat\u00a0von\u00a0Hat"));
 		assertTrue(GroupState.namesMatch("skreech king", "Skreech King"));
+	}
+
+	private static MemberDto updatedAt(String name, String lastUpdated)
+	{
+		MemberDto dto = member(name, null);
+		dto.last_updated = lastUpdated;
+		return dto;
+	}
+
+	@Test
+	public void aResponseFromBeforeAResetIsDropped()
+	{
+		// A poll still in flight when the credentials change must not bring the old group
+		// back, nor move the cursor so that the new group's first fetch skips its history.
+		GroupState state = new GroupState();
+		int before = state.getGeneration();
+		state.reset();
+
+		assertFalse(state.applyUpdate(
+			new MemberDto[]{updatedAt("alice", "2026-10-13T12:00:00Z")}, before));
+		assertTrue(state.isEmpty());
+		assertEquals("1970-01-01T00:00:00Z", state.getFromTime());
+	}
+
+	@Test
+	public void aResponseFromTheCurrentGenerationIsMerged()
+	{
+		GroupState state = new GroupState();
+		state.reset();
+
+		assertTrue(state.applyUpdate(new MemberDto[]{member("alice", null)}, state.getGeneration()));
+		assertNotNull(state.getMember("alice"));
+	}
+
+	@Test
+	public void theCursorNeverMovesBackwards()
+	{
+		GroupState state = new GroupState();
+		state.applyUpdate(new MemberDto[]{updatedAt("alice", "2026-10-13T12:00:05Z")});
+		assertEquals("2026-10-13T12:00:05Z", state.getFromTime());
+
+		// An older timestamp, or none at all, leaves the cursor where it is.
+		state.applyUpdate(new MemberDto[]{updatedAt("alice", "2026-10-13T12:00:01Z")});
+		assertEquals("2026-10-13T12:00:05Z", state.getFromTime());
+		state.applyUpdate(new MemberDto[]{member("alice", null)});
+		assertEquals("2026-10-13T12:00:05Z", state.getFromTime());
+
+		state.applyUpdate(new MemberDto[]{updatedAt("alice", "2026-10-13T12:00:09Z")});
+		assertEquals("2026-10-13T12:00:09Z", state.getFromTime());
 	}
 
 	@Test
