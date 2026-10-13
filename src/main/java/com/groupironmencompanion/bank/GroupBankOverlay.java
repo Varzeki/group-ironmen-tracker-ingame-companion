@@ -8,6 +8,7 @@ import com.groupironmencompanion.overlay.PanelBackground;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
@@ -17,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import net.runelite.api.Client;
@@ -98,25 +100,33 @@ public class GroupBankOverlay extends Overlay
 	/** Space between the window's outer edge and the content, on the left and right. */
 	private static final int PADDING = 8;
 
-	// The tab strip. "All" and "Group Storage" are the bank's own 41x40 tab tiles with an
-	// icon; member tabs carry a name, so they are the game's short text tabs, which stretch.
+	// The tab strip: a row of the bank's own 41x40 tab tiles, each an icon over a small label.
 
 	/** A bank tab tile, and the space left between neighbouring tiles. */
 	private static final int TILE_WIDTH = 41;
 	private static final int TILE_HEIGHT = 40;
 	private static final int TILE_GAP = 0;
 
-	/** Space between the two tiles and the first member tab. */
-	private static final int MEMBER_TABS_GAP = 4;
+	/**
+	 * The box a tile's icon is fitted into, below the tile's top edge. Icons larger than this
+	 * (the helmet and the group storage chest) are scaled down to fit above the label.
+	 */
+	private static final int TILE_ICON_TOP = 3;
+	private static final int TILE_ICON_WIDTH = 30;
+	private static final int TILE_ICON_HEIGHT = 24;
 
-	/** A member tab's height (the sprite's own), its text padding and its widest label. */
-	private static final int MEMBER_TAB_HEIGHT = 21;
-	private static final int MEMBER_TAB_PADDING = 8;
-	private static final int MEMBER_TAB_GAP = 1;
-	private static final int MEMBER_LABEL_MAX_WIDTH = 96;
+	/** The label's baseline, measured up from the tile's bottom, and its side margins. */
+	private static final int TILE_LABEL_BOTTOM = 4;
+	private static final int TILE_LABEL_PADDING = 1;
 
-	/** The end piece of a member tab, used only if its sprite somehow reports no width. */
-	private static final int MEMBER_TAB_CAP = 20;
+	/** The size of the colour swatch standing in for a member's helmet without sprites. */
+	private static final int FLAT_SWATCH = 14;
+
+	/** The group ironman helmet, recoloured per member. */
+	private static final int MEMBER_ICON = SpriteID.SideiconsInterface._32;
+
+	private static final String ALL_LABEL = "All";
+	private static final String STORAGE_LABEL = "Storage";
 
 	/** The search box below the tab strip, and the gap either side of it. */
 	private static final int SEARCH_GAP = 3;
@@ -148,9 +158,7 @@ public class GroupBankOverlay extends Overlay
 		SpriteID.SteelborderDivider._0,
 		SpriteID.CloseButtons.BUTTON, SpriteID.CloseButtons.HOVERED,
 		SpriteID.Banktabs.TAB, SpriteID.Banktabs.HOVERED, SpriteID.Banktabs.SELECTED,
-		SpriteID.BanktabIcons.ALL_ITEMS, SpriteID.BankStorage._4,
-		SpriteID.TabsShort._0, SpriteID.TabsShort._1, SpriteID.TabsShort._2,
-		SpriteID.TabsShort._3, SpriteID.TabsShort._4, SpriteID.TabsShort._5,
+		SpriteID.BanktabIcons.ALL_ITEMS, SpriteID.BankStorage._4, MEMBER_ICON,
 		SpriteID.V2StoneButton.TOP_LEFT, SpriteID.V2StoneButton.TOP_RIGHT,
 		SpriteID.V2StoneButton.BOTTOM_LEFT, SpriteID.V2StoneButton.BOTTOM_RIGHT,
 		SpriteID.V2StoneButton.LEFT, SpriteID.V2StoneButton.TOP,
@@ -159,17 +167,6 @@ public class GroupBankOverlay extends Overlay
 		SpriteID.ScrollbarDraggerV2.TOP, SpriteID.ScrollbarDraggerV2.MIDDLE,
 		SpriteID.ScrollbarDraggerV2.BOTTOM, SpriteID.ScrollbarDraggerV2.TRACK,
 	};
-
-	/**
-	 * The short text tab's pieces, as (end, middle) pairs per state. The game builds the
-	 * right-hand end by mirroring the left one.
-	 */
-	private static final int MEMBER_TAB_ACTIVE_END = SpriteID.TabsShort._0;
-	private static final int MEMBER_TAB_ACTIVE_MIDDLE = SpriteID.TabsShort._1;
-	private static final int MEMBER_TAB_IDLE_END = SpriteID.TabsShort._2;
-	private static final int MEMBER_TAB_IDLE_MIDDLE = SpriteID.TabsShort._3;
-	private static final int MEMBER_TAB_HOVER_END = SpriteID.TabsShort._4;
-	private static final int MEMBER_TAB_HOVER_MIDDLE = SpriteID.TabsShort._5;
 
 	private static final String TITLE = "Group Bank (view only)";
 	private static final String SEARCH_PROMPT = "Click here to search";
@@ -301,8 +298,7 @@ public class GroupBankOverlay extends Overlay
 		List<String> tabs = viewer.getTabs();
 		if (tabs != tabLayoutSource)
 		{
-			graphics.setFont(GameText.REGULAR);
-			tabLayout = layoutTabs(graphics.getFontMetrics(), tabs);
+			tabLayout = layoutTabs(graphics, tabs, WIDTH);
 			tabLayoutSource = tabs;
 		}
 		stripHeight = tabLayout.height;
@@ -430,85 +426,95 @@ public class GroupBankOverlay extends Overlay
 	// ------------------------------------------------------------------
 
 	/**
-	 * Arranges the tab strip: the All and Group Storage tiles first, then a tab per member,
-	 * wrapping onto further rows when the names do not fit.
+	 * Arranges the tab strip: one row of the bank's own tab tiles, All and Group Storage first
+	 * and then a tile per member, wrapping onto further rows only when the window is too
+	 * narrow for them all.
 	 * <p>
 	 * Tabs used to be drawn on a single strip, and anything past the right edge was simply
 	 * dropped. With a full group that silently swallowed the last tab, which is how the
 	 * group storage tab became unreachable. Wrapping keeps every tab clickable.
 	 */
-	private TabLayout layoutTabs(FontMetrics metrics, List<String> tabs)
+	private TabLayout layoutTabs(Graphics2D graphics, List<String> tabs, int width)
 	{
-		List<TabSlot> slots = new ArrayList<>();
 		if (tabs.isEmpty())
 		{
 			return TabLayout.EMPTY;
 		}
 
-		int tileX = PADDING;
+		List<String> ordered = new ArrayList<>(tabs.size());
 		for (String tab : tabs)
 		{
-			if (isTileTab(tab))
+			if (isFixedTab(tab))
 			{
-				slots.add(new TabSlot(tab, tab, true, new Rectangle(tileX, CONTENT_TOP, TILE_WIDTH, TILE_HEIGHT)));
-				tileX += TILE_WIDTH + TILE_GAP;
+				ordered.add(tab);
+			}
+		}
+		for (String tab : tabs)
+		{
+			if (!isFixedTab(tab))
+			{
+				ordered.add(tab);
 			}
 		}
 
-		int left = tileX - TILE_GAP + MEMBER_TABS_GAP;
-		int right = WIDTH - PADDING;
-		int x = left;
-		int row = 0;
-		for (String tab : tabs)
+		int perRow = tilesPerRow(width);
+		List<TabSlot> slots = new ArrayList<>(ordered.size());
+		for (int i = 0; i < ordered.size(); i++)
 		{
-			if (isTileTab(tab))
-			{
-				continue;
-			}
-
-			String label = abbreviate(tab, metrics, MEMBER_LABEL_MAX_WIDTH);
-			int width = Math.min(right - left, metrics.stringWidth(label) + MEMBER_TAB_PADDING * 2);
-			if (x > left && x + width > right)
-			{
-				row++;
-				x = left;
-			}
-
-			slots.add(new TabSlot(tab, label, false,
-				new Rectangle(x, CONTENT_TOP + row * MEMBER_TAB_HEIGHT, width, MEMBER_TAB_HEIGHT)));
-			x += width + MEMBER_TAB_GAP;
+			String tab = ordered.get(i);
+			int column = i % perRow;
+			int row = i / perRow;
+			Rectangle box = new Rectangle(PADDING + column * (TILE_WIDTH + TILE_GAP),
+				CONTENT_TOP + row * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT);
+			slots.add(fitLabel(graphics, tab, box));
 		}
 
-		boolean anyMembers = slots.stream().anyMatch(slot -> !slot.tile);
-		int membersHeight = anyMembers ? (row + 1) * MEMBER_TAB_HEIGHT : 0;
-		return new TabLayout(Collections.unmodifiableList(slots), Math.max(TILE_HEIGHT, membersHeight));
+		int rows = (ordered.size() + perRow - 1) / perRow;
+		return new TabLayout(Collections.unmodifiableList(slots), rows * TILE_HEIGHT);
 	}
 
-	private static boolean isTileTab(String tab)
+	/** How many tab tiles fit across a window this wide. */
+	private static int tilesPerRow(int width)
+	{
+		return Math.max(1, (width - PADDING * 2 + TILE_GAP) / (TILE_WIDTH + TILE_GAP));
+	}
+
+	/**
+	 * Picks the label for a tile and the largest of the small fonts it fits in, shortening it
+	 * only if even the smallest is too wide. Worked out once per layout, not per frame.
+	 */
+	private static TabSlot fitLabel(Graphics2D graphics, String tab, Rectangle box)
+	{
+		String text = GroupBankViewer.TAB_ALL.equals(tab) ? ALL_LABEL
+			: GroupBankViewer.TAB_SHARED.equals(tab) ? STORAGE_LABEL
+			: tab;
+		int room = box.width - TILE_LABEL_PADDING * 2;
+
+		for (Font font : GameText.LABEL_SIZES)
+		{
+			if (graphics.getFontMetrics(font).stringWidth(text) <= room)
+			{
+				return new TabSlot(tab, text, font, box);
+			}
+		}
+
+		Font smallest = GameText.LABEL_SIZES[GameText.LABEL_SIZES.length - 1];
+		return new TabSlot(tab, abbreviate(text, graphics.getFontMetrics(smallest), room), smallest, box);
+	}
+
+	private static boolean isFixedTab(String tab)
 	{
 		return GroupBankViewer.TAB_ALL.equals(tab) || GroupBankViewer.TAB_SHARED.equals(tab);
 	}
 
 	private int drawTabs(Graphics2D graphics, java.awt.Point origin, int top, java.awt.Point local, boolean skinned)
 	{
-		graphics.setFont(GameText.REGULAR);
-		FontMetrics metrics = graphics.getFontMetrics();
-
 		for (TabSlot slot : tabLayout.slots)
 		{
 			Rectangle box = slot.box;
 			boolean active = slot.tab.equals(viewer.getActiveTab());
 			boolean hovered = box.contains(local);
-
-			if (slot.tile)
-			{
-				drawTile(graphics, slot, active, hovered, skinned);
-			}
-			else
-			{
-				drawMemberTab(graphics, metrics, slot, active, hovered, skinned);
-			}
-
+			drawTile(graphics, slot, active, hovered, skinned);
 			frameTabs.add(new TabHit(slot.tab, toCanvas(box, origin)));
 		}
 
@@ -520,13 +526,16 @@ public class GroupBankOverlay extends Overlay
 	}
 
 	/**
-	 * One of the bank's own tab tiles, with its icon. Icons carry no text, so hovering one
-	 * names it, as hovering a bank tab does.
+	 * One of the bank's own tab tiles: an icon above a small label. All and Group Storage use
+	 * the bank's all-items and group storage icons; a member's tile is the group ironman
+	 * helmet in that member's colour, the colour their marker has on the world map. Hovering
+	 * a tile names it in full, as hovering a bank tab does.
 	 */
 	private void drawTile(Graphics2D graphics, TabSlot slot, boolean active, boolean hovered, boolean skinned)
 	{
 		Rectangle box = slot.box;
-		boolean all = GroupBankViewer.TAB_ALL.equals(slot.tab);
+		Color memberColour = memberColour(slot.tab);
+		int iconY = box.y + TILE_ICON_TOP;
 
 		if (skinned)
 		{
@@ -534,63 +543,49 @@ public class GroupBankOverlay extends Overlay
 				: hovered ? SpriteID.Banktabs.HOVERED
 				: SpriteID.Banktabs.TAB;
 			sprites.draw(graphics, tile, box.x, box.y);
-			sprites.drawCentred(graphics, all ? SpriteID.BanktabIcons.ALL_ITEMS : SpriteID.BankStorage._4,
-				box.x, box.y, box.width, box.height);
+
+			int icon = GroupBankViewer.TAB_ALL.equals(slot.tab) ? SpriteID.BanktabIcons.ALL_ITEMS
+				: GroupBankViewer.TAB_SHARED.equals(slot.tab) ? SpriteID.BankStorage._4
+				: MEMBER_ICON;
+			BufferedImage image = sprites.icon(icon, memberColour, TILE_ICON_WIDTH, TILE_ICON_HEIGHT);
+			if (image != null)
+			{
+				graphics.drawImage(image, box.x + (box.width - image.getWidth()) / 2,
+					iconY + (TILE_ICON_HEIGHT - image.getHeight()) / 2, null);
+			}
 		}
 		else
 		{
 			drawFlatTab(graphics, box, active, hovered);
-			graphics.setFont(GameText.SMALL);
-			FontMetrics small = graphics.getFontMetrics();
-			String label = all ? "All" : "Storage";
-			GameText.drawShadowed(graphics, label, box.x + (box.width - small.stringWidth(label)) / 2,
-				GameText.centredBaseline(small, box.y, box.height),
-				active || hovered ? GameText.HOVER : GameText.ORANGE);
-			graphics.setFont(GameText.REGULAR);
+			if (memberColour != null)
+			{
+				graphics.setColor(memberColour);
+				graphics.fillRect(box.x + (box.width - FLAT_SWATCH) / 2,
+					iconY + (TILE_ICON_HEIGHT - FLAT_SWATCH) / 2, FLAT_SWATCH, FLAT_SWATCH);
+			}
 		}
+
+		graphics.setFont(slot.font);
+		FontMetrics metrics = graphics.getFontMetrics();
+		GameText.drawShadowed(graphics, slot.label, box.x + (box.width - metrics.stringWidth(slot.label)) / 2,
+			box.y + box.height - TILE_LABEL_BOTTOM, active || hovered ? GameText.HOVER : GameText.ORANGE);
 
 		if (hovered)
 		{
-			tooltipManager.add(new Tooltip(all ? "All items" : GroupBankViewer.TAB_SHARED));
+			tooltipManager.add(new Tooltip(GroupBankViewer.TAB_ALL.equals(slot.tab) ? "All items" : slot.tab));
 		}
 	}
 
-	/**
-	 * A member's tab: the game's short text tab, built from an end piece, a middle that
-	 * stretches to fit the name, and the end piece mirrored. On a tab narrower than both
-	 * ends, each end gets half.
-	 */
-	private void drawMemberTab(Graphics2D graphics, FontMetrics metrics, TabSlot slot, boolean active,
-		boolean hovered, boolean skinned)
+	/** A member's colour, or null for the All and Group Storage tabs. */
+	@Nullable
+	private Color memberColour(String tab)
 	{
-		Rectangle box = slot.box;
-
-		if (skinned)
+		if (isFixedTab(tab))
 		{
-			int end = active ? MEMBER_TAB_ACTIVE_END : hovered ? MEMBER_TAB_HOVER_END : MEMBER_TAB_IDLE_END;
-			int middle = active ? MEMBER_TAB_ACTIVE_MIDDLE : hovered ? MEMBER_TAB_HOVER_MIDDLE : MEMBER_TAB_IDLE_MIDDLE;
-			int cap = sprites.widthOf(end, MEMBER_TAB_CAP);
-			int leftCap = Math.min(cap, box.width / 2);
-			int rightCap = Math.min(cap, box.width - leftCap);
-
-			sprites.tile(graphics, middle, box.x + leftCap, box.y, box.width - leftCap - rightCap, box.height);
-
-			Shape clip = graphics.getClip();
-			graphics.clipRect(box.x, box.y, leftCap, box.height);
-			sprites.draw(graphics, end, box.x, box.y);
-			graphics.setClip(clip);
-			graphics.clipRect(box.x + box.width - rightCap, box.y, rightCap, box.height);
-			sprites.drawMirrored(graphics, end, box.x + box.width - cap, box.y);
-			graphics.setClip(clip);
+			return null;
 		}
-		else
-		{
-			drawFlatTab(graphics, box, active, hovered);
-		}
-
-		GameText.drawShadowed(graphics, slot.label, box.x + (box.width - metrics.stringWidth(slot.label)) / 2,
-			GameText.centredBaseline(metrics, box.y, box.height),
-			active || hovered ? GameText.HOVER : GameText.ORANGE);
+		GroupMember member = groupState.getMember(tab);
+		return member != null ? member.getColour() : BankStyle.TEXT;
 	}
 
 	private static void drawFlatTab(Graphics2D graphics, Rectangle box, boolean active, boolean hovered)
@@ -604,19 +599,19 @@ public class GroupBankOverlay extends Overlay
 		}
 	}
 
-	/** One tab's place in the strip, worked out before anything is drawn. */
+	/** One tab's place in the strip and its fitted label, worked out before anything is drawn. */
 	private static final class TabSlot
 	{
 		private final String tab;
 		private final String label;
-		private final boolean tile;
+		private final Font font;
 		private final Rectangle box;
 
-		TabSlot(String tab, String label, boolean tile, Rectangle box)
+		TabSlot(String tab, String label, Font font, Rectangle box)
 		{
 			this.tab = tab;
 			this.label = label;
-			this.tile = tile;
+			this.font = font;
 			this.box = box;
 		}
 	}

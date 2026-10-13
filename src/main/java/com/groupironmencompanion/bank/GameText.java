@@ -30,6 +30,15 @@ final class GameText
 	/** The game's bold font, used for interface titles. */
 	static final Font BOLD = FontManager.getRunescapeBoldFont();
 
+	/**
+	 * The small font and progressively smaller sizes of it, largest first, for labels that
+	 * must fit a fixed space such as a bank tab tile. The RuneScape fonts are drawn for one
+	 * size, so the smaller ones are only used when a label would not fit otherwise.
+	 */
+	static final Font[] LABEL_SIZES = {
+		SMALL, SMALL.deriveFont(14f), SMALL.deriveFont(13f), SMALL.deriveFont(12f), SMALL.deriveFont(11f),
+	};
+
 	/** The orange the game uses for interface titles, buttons and labels ({@code 0xff981f}). */
 	static final Color ORANGE = JagexColors.DARK_ORANGE_INTERFACE_TEXT;
 

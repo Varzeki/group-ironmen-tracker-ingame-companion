@@ -3,6 +3,7 @@ package com.groupironmencompanion.bank;
 import com.groupironmencompanion.GroupIronmenCompanionConfig;
 import java.awt.Color;
 import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.Shape;
 import java.awt.image.BufferedImage;
 import java.util.Arrays;
@@ -47,6 +48,12 @@ public class GameSprites
 	private static final long MISSING_RETRY_MILLIS = 2000;
 
 	/**
+	 * How much of a tint colour's saturation a recoloured icon takes on. Below 1 so the
+	 * metal of the helmet still reads as metal rather than flat paint.
+	 */
+	private static final float TINT_SATURATION = 0.85f;
+
+	/**
 	 * Config groups whose changes can reskin interfaces: Resource Packs, Interface Styles,
 	 * and RuneLite's own, which holds every plugin's on/off switch.
 	 */
@@ -61,6 +68,9 @@ public class GameSprites
 
 	private final Map<Integer, Sprite> sprites = new HashMap<>();
 	private final Map<Integer, Long> missing = new HashMap<>();
+
+	/** Icons fitted to a size and optionally recoloured, built once each from the sprites above. */
+	private final Map<Long, BufferedImage> icons = new HashMap<>();
 
 	/** Bumped whenever cached sprites are thrown away, so composed images can be rebuilt. */
 	private int version;
@@ -179,6 +189,7 @@ public class GameSprites
 	{
 		sprites.clear();
 		missing.clear();
+		icons.clear();
 		version++;
 	}
 
@@ -295,26 +306,6 @@ public class GameSprites
 	}
 
 	/**
-	 * Draws a sprite flipped left to right, with its box's top-left corner at the given point.
-	 * The game builds symmetric pieces such as the right end of a tab from the left end this
-	 * way, so there is no separate sprite for it.
-	 */
-	void drawMirrored(Graphics2D graphics, int id, int x, int y)
-	{
-		Sprite sprite = get(id);
-		if (sprite == null)
-		{
-			return;
-		}
-		int width = sprite.image.getWidth();
-		int height = sprite.image.getHeight();
-		int left = x + sprite.maxWidth - sprite.offsetX - width;
-		int top = y + sprite.offsetY;
-		graphics.drawImage(sprite.image, left, top, left + width, top + height,
-			width, 0, 0, height, null);
-	}
-
-	/**
 	 * Repeats a sprite across a rectangle, clipped to it, stepping by the sprite's box the way
 	 * the game tiles a sprite component.
 	 */
@@ -370,6 +361,88 @@ public class GameSprites
 		draw(graphics, topRight, x + width - topRightWidth, y);
 		draw(graphics, bottomLeft, x, y + height - bottomLeftHeight);
 		draw(graphics, bottomRight, x + width - bottomRightWidth, y + height - bottomRightHeight);
+	}
+
+	/**
+	 * A sprite's pixels, recoloured to a tint if one is given and scaled down to fit a box if
+	 * they are larger than it. Built once per sprite, tint and size, and rebuilt along with
+	 * everything else when the theme changes; a member's new colour simply asks for another.
+	 */
+	@Nullable
+	BufferedImage icon(int id, @Nullable Color tint, int maxWidth, int maxHeight)
+	{
+		Sprite sprite = get(id);
+		if (sprite == null)
+		{
+			return null;
+		}
+
+		long key = ((long) id << 42) | ((tint == null ? 0L : 1L) << 41)
+			| ((long) (tint == null ? 0 : tint.getRGB() & 0xFFFFFF) << 17)
+			| ((long) (maxWidth & 0xFF) << 9) | (maxHeight & 0x1FF);
+		BufferedImage icon = icons.get(key);
+		if (icon == null)
+		{
+			icon = fit(tint == null ? sprite.image : tint(sprite.image, tint), maxWidth, maxHeight);
+			icons.put(key, icon);
+		}
+		return icon;
+	}
+
+	/**
+	 * Recolours an image to a tint while keeping its shading: every opaque pixel takes the
+	 * tint's hue and at least most of its saturation, and keeps its own brightness. Grey metal
+	 * takes the colour, highlights stay light and the black outline stays black.
+	 */
+	private static BufferedImage tint(BufferedImage source, Color tint)
+	{
+		float[] target = Color.RGBtoHSB(tint.getRed(), tint.getGreen(), tint.getBlue(), null);
+		float saturation = target[1] * TINT_SATURATION;
+		float[] hsb = new float[3];
+
+		BufferedImage result = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
+		for (int y = 0; y < source.getHeight(); y++)
+		{
+			for (int x = 0; x < source.getWidth(); x++)
+			{
+				int argb = source.getRGB(x, y);
+				int alpha = argb >>> 24;
+				if (alpha == 0)
+				{
+					continue;
+				}
+				Color.RGBtoHSB((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF, hsb);
+				int rgb = Color.HSBtoRGB(target[0], Math.max(hsb[1], saturation), hsb[2]);
+				result.setRGB(x, y, (alpha << 24) | (rgb & 0xFFFFFF));
+			}
+		}
+		return result;
+	}
+
+	/** Scales an image down, keeping its proportions, if it is larger than the box. */
+	private static BufferedImage fit(BufferedImage image, int maxWidth, int maxHeight)
+	{
+		double scale = Math.min((double) maxWidth / image.getWidth(), (double) maxHeight / image.getHeight());
+		if (scale >= 1)
+		{
+			return image;
+		}
+
+		int width = Math.max(1, (int) Math.round(image.getWidth() * scale));
+		int height = Math.max(1, (int) Math.round(image.getHeight() * scale));
+		BufferedImage scaled = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+		Graphics2D graphics = scaled.createGraphics();
+		try
+		{
+			graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+			graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+			graphics.drawImage(image, 0, 0, width, height, null);
+		}
+		finally
+		{
+			graphics.dispose();
+		}
+		return scaled;
 	}
 
 	/** The width of a sprite's box, or the fallback when it is missing. */
