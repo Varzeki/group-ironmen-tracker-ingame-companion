@@ -10,11 +10,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.IntToLongFunction;
 import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.Getter;
 import lombok.Setter;
+import net.runelite.api.gameval.ItemID;
 import net.runelite.client.game.ItemManager;
 
 /**
@@ -183,7 +185,7 @@ public class GroupBankViewer
 			if (!entry.header)
 			{
 				count++;
-				value += alchProfit(entry.itemId) * entry.quantity;
+				value += stackValue(entry.itemId, alchProfit(entry.itemId), entry.quantity);
 			}
 		}
 		visibleItemCount = count;
@@ -213,15 +215,38 @@ public class GroupBankViewer
 			}
 		}
 
+		sortByValue(entries, this::alchProfit);
+		return entries;
+	}
+
+	/** Sorts stacks most valuable first, by {@link #stackValue}. */
+	static void sortByValue(List<Entry> entries, IntToLongFunction profitEach)
+	{
 		// Value is looked up once per entry rather than on every comparison; a whole group's
 		// bank can run to thousands of stacks.
 		Map<Integer, Long> values = new HashMap<>(entries.size());
 		for (Entry entry : entries)
 		{
-			values.put(entry.itemId, alchProfit(entry.itemId) * entry.quantity);
+			values.put(entry.itemId, stackValue(entry.itemId, profitEach.applyAsLong(entry.itemId), entry.quantity));
 		}
 		entries.sort(Comparator.comparingLong((Entry e) -> values.getOrDefault(e.itemId, 0L)).reversed());
-		return entries;
+	}
+
+	/**
+	 * What a stack counts for when sorting the All tab and totalling the footer.
+	 * <p>
+	 * Coins count at face value: they alch for nothing, but are plainly worth their amount. A
+	 * stack that would lose money to alch counts as nothing. Counting the loss sank coins,
+	 * runes and every big cheap stack to the bottom of the list and dragged the total down
+	 * with them; the tooltip still shows the loss.
+	 */
+	static long stackValue(int itemId, long profitEach, long quantity)
+	{
+		if (itemId == ItemID.COINS)
+		{
+			return quantity;
+		}
+		return Math.max(0, profitEach) * quantity;
 	}
 
 	/** One member's holdings, split into the containers they came from. */
