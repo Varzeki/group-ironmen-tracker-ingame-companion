@@ -52,8 +52,8 @@ public class GroupBankOverlay extends Overlay
 {
 	/**
 	 * The real bank's item pitch: 36x32 sprites, 48 apart across and 36 down. Matching it
-	 * makes the two windows read as the same thing when they sit side by side, at the cost of
-	 * a window about 80px wider than the 40px pitch it replaced.
+	 * makes the two windows read as the same thing when they sit side by side. A window
+	 * resized to a size between whole cells spreads the spare pixels between the cells.
 	 */
 	static final int CELL_WIDTH = 48;
 	static final int CELL_HEIGHT = 36;
@@ -212,35 +212,31 @@ public class GroupBankOverlay extends Overlay
 			+ rows * CELL_HEIGHT + FOOTER_HEIGHT + FRAME_EDGE;
 	}
 
-	/**
-	 * The window's shape for a requested size: snapped to whole 48x36 cells, at least the
-	 * minimum, and no bigger than the canvas. A null request is the default size. The height
-	 * depends on the width, because a narrower window can wrap the tabs onto another row.
-	 */
-	private static Geometry geometryFor(@Nullable Dimension requested, int tabCount, int canvasWidth,
-		int canvasHeight)
+	/** The narrowest the window can be: the minimum number of columns and no spare pixels. */
+	private static final int MIN_WIDTH = CHROME_WIDTH + MIN_COLUMNS * CELL_WIDTH;
+
+	/** The width before the window is ever resized. */
+	private static final int DEFAULT_WIDTH = CHROME_WIDTH + GroupBankViewer.DEFAULT_COLUMNS * CELL_WIDTH;
+
+	/** A width kept between the minimum and the canvas. */
+	private static int clampWidth(int width, int canvasWidth)
 	{
-		int maxColumns = Math.max(MIN_COLUMNS, (canvasWidth - CHROME_WIDTH) / CELL_WIDTH);
-		int columns = requested == null ? GroupBankViewer.DEFAULT_COLUMNS
-			: Math.round((float) (requested.width - CHROME_WIDTH) / CELL_WIDTH);
-		columns = Math.max(MIN_COLUMNS, Math.min(maxColumns, columns));
-		int width = CHROME_WIDTH + columns * CELL_WIDTH;
-
-		// The tabs only wrap when even bank-tab-width tiles do not fit, so this matches the
-		// height of the strip as it is actually laid out.
-		int perRow = Math.max(1, (width - PADDING * 2 + TILE_GAP) / (TILE_WIDTH + TILE_GAP));
-		int strip = Math.max(1, (tabCount + perRow - 1) / perRow) * TILE_HEIGHT;
-		int chrome = heightFor(strip, 0);
-
-		int maxRows = Math.max(MIN_ROWS, (canvasHeight - chrome) / CELL_HEIGHT);
-		int rows = requested == null ? DEFAULT_ROWS
-			: Math.round((float) (requested.height - chrome) / CELL_HEIGHT);
-		rows = Math.max(MIN_ROWS, Math.min(maxRows, rows));
-
-		return new Geometry(columns, rows, width, chrome + rows * CELL_HEIGHT);
+		return Math.max(MIN_WIDTH, Math.min(width, canvasWidth));
 	}
 
-	/** The window's size in cells and in pixels. Immutable, so it can be shared with AWT. */
+	/**
+	 * A height kept between the minimum and the canvas, for a window whose fixed parts (the
+	 * title, tabs, search box and footer) take up the given height.
+	 */
+	private static int clampHeight(int height, int chrome, int canvasHeight)
+	{
+		return Math.max(chrome + MIN_ROWS * CELL_HEIGHT, Math.min(height, canvasHeight));
+	}
+
+	/**
+	 * The window's size, and how many whole columns and rows of items it shows. Immutable,
+	 * so it can be shared with AWT.
+	 */
 	private static final class Geometry
 	{
 		private final int columns;
@@ -248,12 +244,16 @@ public class GroupBankOverlay extends Overlay
 		private final int width;
 		private final int height;
 
-		Geometry(int columns, int rows, int width, int height)
+		/** The height of everything that is not the grid, which depends on the tab rows. */
+		private final int chrome;
+
+		Geometry(int columns, int rows, int width, int height, int chrome)
 		{
 			this.columns = columns;
 			this.rows = rows;
 			this.width = width;
 			this.height = height;
+			this.chrome = chrome;
 		}
 	}
 
@@ -302,11 +302,11 @@ public class GroupBankOverlay extends Overlay
 
 	/**
 	 * The shape of the frame last drawn, and what it was worked out from. The input handler
-	 * snaps a size being dragged against these on the AWT thread, where the client cannot be
+	 * clamps a size being dragged against these on the AWT thread, where the client cannot be
 	 * asked for the canvas size.
 	 */
-	private volatile Geometry geometry = geometryFor(null, 0, Integer.MAX_VALUE, Integer.MAX_VALUE);
-	private volatile int tabCount;
+	private volatile Geometry geometry = new Geometry(GroupBankViewer.DEFAULT_COLUMNS, DEFAULT_ROWS,
+		DEFAULT_WIDTH, heightFor(TILE_HEIGHT, DEFAULT_ROWS), heightFor(TILE_HEIGHT, 0));
 	private volatile int canvasWidth = Integer.MAX_VALUE;
 	private volatile int canvasHeight = Integer.MAX_VALUE;
 
@@ -347,13 +347,14 @@ public class GroupBankOverlay extends Overlay
 	}
 
 	/**
-	 * The window size closest to the one asked for that the window can actually take: whole
-	 * cells, at least the minimum and at most the canvas. Safe to call from any thread.
+	 * A size being dragged, kept between the minimum and the canvas. The window follows the
+	 * pointer to the pixel; only the grid inside it moves in whole cells. Safe to call from
+	 * any thread.
 	 */
-	Dimension snapSize(int width, int height)
+	Dimension clampSize(int width, int height)
 	{
-		Geometry snapped = geometryFor(new Dimension(width, height), tabCount, canvasWidth, canvasHeight);
-		return new Dimension(snapped.width, snapped.height);
+		return new Dimension(clampWidth(width, canvasWidth),
+			clampHeight(height, geometry.chrome, canvasHeight));
 	}
 
 	/** How many rows of items are in view. */
@@ -381,16 +382,28 @@ public class GroupBankOverlay extends Overlay
 		// fit across, and that has to be known before the rows are laid out.
 		canvasWidth = client.getCanvasWidth();
 		canvasHeight = client.getCanvasHeight();
-		viewer.setColumns(geometryFor(getPreferredSize(), viewer.getTabs().size(), canvasWidth, canvasHeight).columns);
+		Dimension preferred = getPreferredSize();
+		frameWidth = clampWidth(preferred == null ? DEFAULT_WIDTH : preferred.width, canvasWidth);
+		int columns = (frameWidth - CHROME_WIDTH) / CELL_WIDTH;
+		viewer.setColumns(columns);
 		viewer.rebuildIfNeeded();
 
+		// The tabs are laid out next, because how many rows they need decides how much
+		// height is left for the grid.
+		GameText.prepare(graphics);
 		List<String> tabs = viewer.getTabs();
-		Geometry geo = geometryFor(getPreferredSize(), tabs.size(), canvasWidth, canvasHeight);
-		geometry = geo;
-		tabCount = tabs.size();
-		frameWidth = geo.width;
-		frameRows = geo.rows;
-		int height = geo.height;
+		if (tabs != tabLayoutSource || frameWidth != tabLayoutWidth)
+		{
+			tabLayout = layoutTabs(graphics, tabs, frameWidth);
+			tabLayoutSource = tabs;
+			tabLayoutWidth = frameWidth;
+		}
+
+		int chrome = heightFor(tabLayout.height, 0);
+		int height = clampHeight(preferred == null ? chrome + DEFAULT_ROWS * CELL_HEIGHT : preferred.height,
+			chrome, canvasHeight);
+		frameRows = (height - chrome) / CELL_HEIGHT;
+		geometry = new Geometry(columns, frameRows, frameWidth, height, chrome);
 
 		java.awt.Point origin = getBounds().getLocation();
 		Point mouse = client.getMouseCanvasPosition();
@@ -399,15 +412,7 @@ public class GroupBankOverlay extends Overlay
 			: new java.awt.Point(mouse.getX() - origin.x, mouse.getY() - origin.y);
 
 		frameTabs = new ArrayList<>();
-		GameText.prepare(graphics);
 		sprites.refresh();
-
-		if (tabs != tabLayoutSource || frameWidth != tabLayoutWidth)
-		{
-			tabLayout = layoutTabs(graphics, tabs, frameWidth);
-			tabLayoutSource = tabs;
-			tabLayoutWidth = frameWidth;
-		}
 
 		boolean skinned = sprites.hasAll(SPRITES);
 		drawFrame(graphics, height, skinned);
@@ -846,8 +851,11 @@ public class GroupBankOverlay extends Overlay
 
 	private void drawGrid(Graphics2D graphics, java.awt.Point origin, int top, java.awt.Point local, boolean skinned)
 	{
-		Rectangle area = new Rectangle(PADDING, top, viewer.getColumns() * CELL_WIDTH,
-			frameRows * CELL_HEIGHT);
+		// The grid takes all the room left, and its whole columns and rows share out any
+		// spare pixels between them, so a window between whole cells has no dead strip.
+		Rectangle area = new Rectangle(PADDING, top, frameWidth - CHROME_WIDTH,
+			geometry.height - top - FOOTER_HEIGHT - FRAME_EDGE);
+		int columns = viewer.getColumns();
 		frameGrid = toCanvas(area, origin);
 
 		// Clamped to what is in view, so making the window taller never leaves the grid
@@ -865,29 +873,30 @@ public class GroupBankOverlay extends Overlay
 		Shape clip = graphics.getClip();
 		graphics.clipRect(area.x, area.y, area.width, area.height);
 
-		int y = area.y;
-
-		for (int index = first; index < rows.size() && y < area.y + area.height; index++)
+		for (int line = 0; line < frameRows && first + line < rows.size(); line++)
 		{
-			GroupBankViewer.Row row = rows.get(index);
+			GroupBankViewer.Row row = rows.get(first + line);
+			int y = area.y + line * area.height / frameRows;
+			int rowHeight = area.y + (line + 1) * area.height / frameRows - y;
 
 			if (row.isHeader())
 			{
+				int textY = y + (rowHeight - CELL_HEIGHT) / 2;
 				graphics.setFont(GameText.REGULAR);
-				GameText.drawShadowed(graphics, row.getHeader(), area.x + 2, y + 15, GameText.ORANGE);
+				GameText.drawShadowed(graphics, row.getHeader(), area.x + 2, textY + 15, GameText.ORANGE);
 				graphics.setColor(sprites.getLineColour());
-				graphics.drawLine(area.x + 2, y + 19, area.x + area.width - 4, y + 19);
-				y += CELL_HEIGHT;
+				graphics.drawLine(area.x + 2, textY + 19, area.x + area.width - 4, textY + 19);
 				continue;
 			}
 
-			int x = area.x;
+			int column = 0;
 			for (GroupBankViewer.Entry entry : row.getItems())
 			{
-				drawCell(graphics, entry, x, y, local);
-				x += CELL_WIDTH;
+				int x = area.x + column * area.width / columns;
+				int cellWidth = area.x + (column + 1) * area.width / columns - x;
+				drawCell(graphics, entry, x, y, cellWidth, rowHeight, local);
+				column++;
 			}
-			y += CELL_HEIGHT;
 		}
 
 		graphics.setClip(clip);
@@ -938,14 +947,15 @@ public class GroupBankOverlay extends Overlay
 		}
 	}
 
-	private void drawCell(Graphics2D graphics, GroupBankViewer.Entry entry, int x, int y, java.awt.Point local)
+	private void drawCell(Graphics2D graphics, GroupBankViewer.Entry entry, int x, int y, int cellWidth,
+		int cellHeight, java.awt.Point local)
 	{
-		boolean hovered = local.x >= x && local.x < x + CELL_WIDTH && local.y >= y && local.y < y + CELL_HEIGHT;
+		boolean hovered = local.x >= x && local.x < x + cellWidth && local.y >= y && local.y < y + cellHeight;
 
 		if (hovered)
 		{
 			graphics.setColor(BankStyle.HOVER);
-			graphics.fillRect(x, y, CELL_WIDTH, CELL_HEIGHT);
+			graphics.fillRect(x, y, cellWidth, cellHeight);
 		}
 
 		long quantity = entry.getQuantity();
@@ -957,16 +967,16 @@ public class GroupBankOverlay extends Overlay
 		BufferedImage image = itemManager.getImage(entry.getItemId());
 		if (image != null)
 		{
-			graphics.drawImage(image, x + (CELL_WIDTH - image.getWidth()) / 2,
-				y + (CELL_HEIGHT - image.getHeight()) / 2, null);
+			graphics.drawImage(image, x + (cellWidth - image.getWidth()) / 2,
+				y + (cellHeight - image.getHeight()) / 2, null);
 		}
 
 		if (quantity > 1)
 		{
 			// Anchored to where the item sprite sits, the way the game anchors it, rather
 			// than to the cell, so it stays put whatever the cell's padding.
-			int imageX = x + (CELL_WIDTH - ITEM_WIDTH) / 2;
-			int imageY = y + (CELL_HEIGHT - ITEM_HEIGHT) / 2;
+			int imageX = x + (cellWidth - ITEM_WIDTH) / 2;
+			int imageY = y + (cellHeight - ITEM_HEIGHT) / 2;
 			graphics.setFont(GameText.SMALL);
 			GameText.drawShadowed(graphics, BankStyle.shortQuantity(quantity),
 				imageX + QUANTITY_X, imageY + QUANTITY_BASELINE, BankStyle.quantityColour(quantity));

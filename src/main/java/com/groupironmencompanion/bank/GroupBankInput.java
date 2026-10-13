@@ -334,9 +334,9 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 	}
 
 	/**
-	 * Resizes to follow the pointer. The size snaps to whole item cells, and dragging the
-	 * left or top edge moves the window by however much the snapped size changed, so the
-	 * opposite edge stays exactly where it was.
+	 * Resizes to follow the pointer to the pixel, within the window's minimum and the canvas.
+	 * Dragging the left or top edge moves the window by however much the size changed, so the
+	 * opposite edge stays exactly where it was even when the size stops at a limit.
 	 */
 	private void resizeTo(java.awt.Point point)
 	{
@@ -350,7 +350,7 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 		int height = start.height
 			+ ((resizeEdges & EDGE_BOTTOM) != 0 ? dy : 0)
 			- ((resizeEdges & EDGE_TOP) != 0 ? dy : 0);
-		java.awt.Dimension size = overlay.snapSize(width, height);
+		java.awt.Dimension size = overlay.clampSize(width, height);
 
 		overlay.setPreferredSize(size);
 		if ((resizeEdges & (EDGE_LEFT | EDGE_TOP)) != 0)
