@@ -53,12 +53,18 @@ public class GameSprites
 	 */
 	private static final float TINT_SATURATION = 0.85f;
 
-	/**
-	 * Config groups whose changes can reskin interfaces: Resource Packs, Interface Styles,
-	 * and RuneLite's own, which holds every plugin's on/off switch.
-	 */
+	/** Config groups whose changes can reskin interfaces: Resource Packs and Interface Styles. */
 	private static final Set<String> THEME_GROUPS = new HashSet<>(Arrays.asList(
-		"resourcepacks", "interfaceStyles", "runelite"));
+		"resourcepacks", "interfaceStyles"));
+
+	/**
+	 * The keys in RuneLite's own config group that turn those plugins on and off. The rest of
+	 * that group is written constantly (every overlay moved or resized, the window itself),
+	 * and reloading every sprite for each of those writes was wasted work.
+	 */
+	private static final String RUNELITE_GROUP = "runelite";
+	private static final Set<String> THEME_PLUGIN_KEYS = new HashSet<>(Arrays.asList(
+		"resourcepacksplugin", "interfacestylesplugin"));
 
 	@Inject
 	private Client client;
@@ -273,9 +279,9 @@ public class GameSprites
 	 * Notes a config change that might have reskinned the interface, so the next refresh
 	 * reloads everything. Safe to call from any thread.
 	 */
-	public void onConfigChanged(String group)
+	public void onConfigChanged(String group, String key)
 	{
-		if (THEME_GROUPS.contains(group))
+		if (THEME_GROUPS.contains(group) || (RUNELITE_GROUP.equals(group) && THEME_PLUGIN_KEYS.contains(key)))
 		{
 			invalidated = true;
 		}

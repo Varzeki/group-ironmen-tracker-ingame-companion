@@ -450,7 +450,7 @@ public class GroupIronmenCompanionPlugin extends Plugin
 		if (!GroupIronmenCompanionConfig.GROUP.equals(event.getGroup()))
 		{
 			// Turning an interface reskin on, off or to another pack restyles the group bank too.
-			gameSprites.onConfigChanged(event.getGroup());
+			gameSprites.onConfigChanged(event.getGroup(), event.getKey());
 			return;
 		}
 
