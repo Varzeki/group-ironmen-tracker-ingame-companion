@@ -7,6 +7,7 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import javax.swing.SwingUtilities;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.game.chatbox.ChatboxPanelManager;
 import net.runelite.client.input.MouseAdapter;
@@ -127,7 +128,9 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 			return event;
 		}
 
-		int edges = edgesAt(hits.window, point);
+		// Only the left button resizes, so a middle-button camera drag that happens to start
+		// on the border still turns the camera.
+		int edges = SwingUtilities.isLeftMouseButton(event) ? edgesAt(hits.window, point) : 0;
 		if (edges != 0)
 		{
 			startResize(edges, point, hits.window);
@@ -200,7 +203,10 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 	public MouseEvent mouseReleased(MouseEvent event)
 	{
 		draggingScrollbar = false;
-		if (resizeEdges != 0)
+
+		// A resize only ever starts from a left press this handler consumed, so only that
+		// button's release ends it and is consumed with it.
+		if (resizeEdges != 0 && SwingUtilities.isLeftMouseButton(event))
 		{
 			finishResize(event.getPoint());
 			event.consume();
