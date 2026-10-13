@@ -316,6 +316,12 @@ public class GroupIronmenCompanionPlugin extends Plugin
 		{
 			log.warn("Group Ironmen Tracker In-Game Companion: poll failed", e);
 		}
+		catch (Error e)
+		{
+			// Anything escaping a scheduled task cancels every later run, silently, which left
+			// the group frozen and everyone drifting to offline. Log it and keep polling.
+			log.error("Group Ironmen Tracker In-Game Companion: poll failed", e);
+		}
 	}
 
 	private String describeConnection()
