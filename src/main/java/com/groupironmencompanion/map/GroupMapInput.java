@@ -1,5 +1,6 @@
 package com.groupironmencompanion.map;
 
+import com.groupironmencompanion.ClientInputState;
 import com.groupironmencompanion.GroupIronmenCompanionConfig;
 import com.groupironmencompanion.data.GroupMember;
 import com.groupironmencompanion.data.GroupState;
@@ -38,10 +39,14 @@ public class GroupMapInput extends MouseAdapter
 	@Inject
 	private ClientThread clientThread;
 
+	@Inject
+	private ClientInputState inputState;
+
 	@Override
 	public MouseEvent mousePressed(MouseEvent event)
 	{
-		if (!config.mapPanel() || event.isAltDown())
+		// While the game's right-click menu is open, a click is picking one of its options.
+		if (!config.mapPanel() || event.isAltDown() || inputState.isMenuOpen())
 		{
 			return event;
 		}
@@ -93,7 +98,8 @@ public class GroupMapInput extends MouseAdapter
 
 	private MouseEvent swallowOnRow(MouseEvent event)
 	{
-		if (config.mapPanel() && !event.isAltDown() && overlay.memberAt(event.getPoint()) != null)
+		if (config.mapPanel() && !event.isAltDown() && !inputState.isMenuOpen()
+			&& overlay.memberAt(event.getPoint()) != null)
 		{
 			event.consume();
 		}

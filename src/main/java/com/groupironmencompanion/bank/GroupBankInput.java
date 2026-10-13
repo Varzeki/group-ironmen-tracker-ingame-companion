@@ -1,5 +1,6 @@
 package com.groupironmencompanion.bank;
 
+import com.groupironmencompanion.ClientInputState;
 import com.groupironmencompanion.GroupIronmenCompanionConfig;
 import java.awt.Rectangle;
 import java.awt.event.MouseEvent;
@@ -42,6 +43,9 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 	@Inject
 	private ChatboxPanelManager chatboxPanelManager;
 
+	@Inject
+	private ClientInputState inputState;
+
 	/** Set while the scrollbar is being dragged, so movement keeps scrolling after the press. */
 	private boolean draggingScrollbar;
 
@@ -58,8 +62,9 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 		}
 
 		// Alt is RuneLite's overlay drag modifier; leave those clicks alone so the window
-		// stays repositionable like any other overlay.
-		if (event.isAltDown())
+		// stays repositionable like any other overlay. A click while the game's right-click
+		// menu is open is picking an option from it, which is drawn over the window.
+		if (event.isAltDown() || inputState.isMenuOpen())
 		{
 			return event;
 		}
@@ -179,7 +184,7 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 
 	private MouseEvent swallowInsideWindow(MouseEvent event)
 	{
-		if (config.bankViewer() && viewer.isOpen() && !event.isAltDown()
+		if (config.bankViewer() && viewer.isOpen() && !event.isAltDown() && !inputState.isMenuOpen()
 			&& overlay.getHits().window.contains(event.getPoint()))
 		{
 			event.consume();

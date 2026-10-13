@@ -30,6 +30,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.Player;
+import net.runelite.api.events.ClientTick;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.ItemContainerChanged;
@@ -115,6 +116,9 @@ public class GroupIronmenCompanionPlugin extends Plugin
 
 	@Inject
 	private TrackerDetector trackerDetector;
+
+	@Inject
+	private ClientInputState inputState;
 
 	@Inject
 	private GroupMapMarkers mapMarkers;
@@ -407,6 +411,12 @@ public class GroupIronmenCompanionPlugin extends Plugin
 			ticksSinceMapRefresh = 0;
 			mapMarkers.refresh();
 		}
+	}
+
+	@Subscribe
+	public void onClientTick(ClientTick event)
+	{
+		inputState.setMenuOpen(client.isMenuOpen());
 	}
 
 	@Subscribe
