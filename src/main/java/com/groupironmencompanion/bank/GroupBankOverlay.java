@@ -17,6 +17,7 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import net.runelite.api.Client;
 import net.runelite.api.Point;
+import net.runelite.api.gameval.SpriteID;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
@@ -39,7 +40,12 @@ import net.runelite.client.ui.overlay.tooltip.TooltipManager;
 @Singleton
 public class GroupBankOverlay extends Overlay
 {
-	static final int CELL_WIDTH = 40;
+	/**
+	 * The real bank's item pitch: 36x32 sprites, 48 apart across and 36 down. Matching it
+	 * makes the two windows read as the same thing when they sit side by side, at the cost of
+	 * a window about 80px wider than the 40px pitch it replaced.
+	 */
+	static final int CELL_WIDTH = 48;
 	static final int CELL_HEIGHT = 36;
 	static final int VISIBLE_ROWS = 7;
 
@@ -47,25 +53,71 @@ public class GroupBankOverlay extends Overlay
 	private static final int ITEM_WIDTH = 36;
 	private static final int ITEM_HEIGHT = 32;
 
+	// The frame is the bank's own steelborder, and these place its pieces exactly as the bank
+	// interface does (Bankmain.FRAME), so a window drawn with them lines up with the real one.
+
+	/** How thick the visible border is on every side. */
+	private static final int FRAME_EDGE = 6;
+
+	/**
+	 * The edge and divider sprites are 6px strips placed 15px into a 36px box, so the box is
+	 * drawn 15px outside the window for the strip to land on its edge.
+	 */
+	private static final int EDGE_BOX = 36;
+	private static final int EDGE_LEAD = 15;
+
+	/** The divider under the title: its box starts here and is clipped to this height. */
+	private static final int DIVIDER_TOP = 14;
+	private static final int DIVIDER_BOX_HEIGHT = 26;
+
+	/** The title text's box; the text is centred in it. */
+	private static final int TITLE_TOP = 6;
+	private static final int TITLE_HEIGHT = 24;
+
+	/** Where the window's content starts, just below the title divider. */
+	private static final int CONTENT_TOP = 35;
+
+	/** The close button's box, measured from the window's top-right corner. */
+	private static final int CLOSE_RIGHT = 29;
+	private static final int CLOSE_TOP = 6;
+	private static final int CLOSE_WIDTH = 26;
+	private static final int CLOSE_HEIGHT = 23;
+
+	/** Corner sizes, used only if a corner sprite somehow reports none. */
+	private static final int CORNER_WIDTH = 25;
+	private static final int CORNER_HEIGHT = 30;
+
+	/** Space between the window's outer edge and the content, on the left and right. */
 	private static final int PADDING = 8;
-	private static final int TITLE_HEIGHT = 22;
 	private static final int TAB_HEIGHT = 20;
 	private static final int SEARCH_HEIGHT = 20;
 	private static final int FOOTER_HEIGHT = 18;
-	private static final int SCROLLBAR_WIDTH = 6;
+	private static final int SCROLLBAR_WIDTH = 16;
+	private static final int SCROLLBAR_GAP = 4;
+
+	/** Every sprite the frame needs. If any is missing the window is drawn flat instead. */
+	private static final int[] FRAME_SPRITES = {
+		SpriteID.TRADEBACKING,
+		SpriteID.Steelborder.TOP_LEFT, SpriteID.Steelborder.TOP_RIGHT,
+		SpriteID.Steelborder.BOTTOM_LEFT, SpriteID.Steelborder.BOTTOM_RIGHT,
+		SpriteID.Steelborder2.EDGE_TOP, SpriteID.Steelborder2.EDGE_RIGHT,
+		SpriteID.Miscgraphics.IRON_RIVETS_HORIZONTAL, SpriteID.Miscgraphics.IRON_RIVETS_VERTICAL,
+		SpriteID.SteelborderDivider._0,
+		SpriteID.CloseButtons.BUTTON, SpriteID.CloseButtons.HOVERED,
+	};
 
 	/** Height for a window whose tab strip occupies the given number of rows. */
 	private static int heightFor(int tabRows)
 	{
-		return TITLE_HEIGHT + tabRows * TAB_HEIGHT + SEARCH_HEIGHT
-			+ VISIBLE_ROWS * CELL_HEIGHT + FOOTER_HEIGHT + PADDING;
+		return CONTENT_TOP + tabRows * TAB_HEIGHT + SEARCH_HEIGHT
+			+ VISIBLE_ROWS * CELL_HEIGHT + FOOTER_HEIGHT + FRAME_EDGE;
 	}
 
 	/** Rows the tab strip needed when it was last laid out. */
 	private volatile int tabRows = 1;
 
 	static final int WIDTH =
-		PADDING * 2 + GroupBankViewer.COLUMNS * CELL_WIDTH + SCROLLBAR_WIDTH;
+		PADDING * 2 + GroupBankViewer.COLUMNS * CELL_WIDTH + SCROLLBAR_GAP + SCROLLBAR_WIDTH;
 
 	/**
 	 * Where the game draws a stack's quantity, relative to the top-left of its 36x32 item
@@ -96,6 +148,16 @@ public class GroupBankOverlay extends Overlay
 
 	@Inject
 	private TooltipManager tooltipManager;
+
+	@Inject
+	private GameSprites sprites;
+
+	/**
+	 * The frame composed into one image, since it is a few hundred sprite draws and only
+	 * changes when the window's size or the sprites themselves do.
+	 */
+	private BufferedImage frameImage;
+	private int frameImageVersion = -1;
 
 	/**
 	 * Hit boxes in canvas coordinates, rebuilt on the client thread every frame and read on
@@ -153,8 +215,9 @@ public class GroupBankOverlay extends Overlay
 		tabRows = Math.max(1, layout.size());
 		int height = heightFor(tabRows);
 
-		drawFrame(graphics, height);
-		int y = drawTitle(graphics, origin, local);
+		boolean skinned = sprites.hasAll(FRAME_SPRITES);
+		drawFrame(graphics, height, skinned);
+		int y = drawTitle(graphics, origin, local, skinned);
 		y = drawTabs(graphics, origin, y, local, layout);
 		y = drawSearch(graphics, origin, y, local);
 		drawGrid(graphics, origin, y, local);
@@ -171,30 +234,102 @@ public class GroupBankOverlay extends Overlay
 	// Drawing
 	// ------------------------------------------------------------------
 
-	private void drawFrame(Graphics2D graphics, int height)
+	/**
+	 * Draws the bank's steelborder frame, or a flat stand-in when its sprites are not
+	 * available. Both have the same geometry, so nothing else changes between them.
+	 */
+	private void drawFrame(Graphics2D graphics, int height, boolean skinned)
 	{
+		if (skinned)
+		{
+			graphics.drawImage(frameImage(WIDTH, height), 0, 0, null);
+			return;
+		}
+
 		graphics.setColor(BankStyle.BACKGROUND);
 		graphics.fillRect(0, 0, WIDTH, height);
+		graphics.setColor(BankStyle.TITLE_BACKGROUND);
+		graphics.fillRect(1, 1, WIDTH - 2, CONTENT_TOP - 1);
 		graphics.setColor(BankStyle.BORDER);
 		graphics.setStroke(BORDER_STROKE);
 		graphics.drawRect(0, 0, WIDTH - 1, height - 1);
+		graphics.drawLine(1, CONTENT_TOP - 1, WIDTH - 2, CONTENT_TOP - 1);
 	}
 
-	private int drawTitle(Graphics2D graphics, java.awt.Point origin, java.awt.Point local)
+	private BufferedImage frameImage(int width, int height)
 	{
-		graphics.setColor(BankStyle.TITLE_BACKGROUND);
-		graphics.fillRect(1, 1, WIDTH - 2, TITLE_HEIGHT - 1);
+		if (frameImage == null || frameImage.getWidth() != width || frameImage.getHeight() != height
+			|| frameImageVersion != sprites.getVersion())
+		{
+			frameImage = composeFrame(width, height);
+			frameImageVersion = sprites.getVersion();
+		}
+		return frameImage;
+	}
 
+	/** Lays out the steelborder pieces the way the bank interface positions them. */
+	private BufferedImage composeFrame(int width, int height)
+	{
+		BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+		Graphics2D g = image.createGraphics();
+		try
+		{
+			int cornerWidth = sprites.widthOf(SpriteID.Steelborder.TOP_LEFT, CORNER_WIDTH);
+			int cornerHeight = sprites.heightOf(SpriteID.Steelborder.TOP_LEFT, CORNER_HEIGHT);
+
+			sprites.tile(g, SpriteID.TRADEBACKING, 0, 0, width, height);
+			sprites.tile(g, SpriteID.SteelborderDivider._0,
+				FRAME_EDGE, DIVIDER_TOP, width - FRAME_EDGE * 2, DIVIDER_BOX_HEIGHT);
+
+			sprites.tile(g, SpriteID.Steelborder2.EDGE_TOP,
+				cornerWidth, -EDGE_LEAD, width - cornerWidth * 2, EDGE_BOX);
+			sprites.tile(g, SpriteID.Miscgraphics.IRON_RIVETS_HORIZONTAL,
+				cornerWidth, height - FRAME_EDGE - EDGE_LEAD, width - cornerWidth * 2, EDGE_BOX);
+			sprites.tile(g, SpriteID.Miscgraphics.IRON_RIVETS_VERTICAL,
+				-EDGE_LEAD, cornerHeight, EDGE_BOX, height - cornerHeight * 2);
+			sprites.tile(g, SpriteID.Steelborder2.EDGE_RIGHT,
+				width - FRAME_EDGE - EDGE_LEAD, cornerHeight, EDGE_BOX, height - cornerHeight * 2);
+
+			sprites.draw(g, SpriteID.Steelborder.TOP_LEFT, 0, 0);
+			sprites.draw(g, SpriteID.Steelborder.TOP_RIGHT,
+				width - sprites.widthOf(SpriteID.Steelborder.TOP_RIGHT, CORNER_WIDTH), 0);
+			sprites.draw(g, SpriteID.Steelborder.BOTTOM_LEFT,
+				0, height - sprites.heightOf(SpriteID.Steelborder.BOTTOM_LEFT, CORNER_HEIGHT));
+			sprites.draw(g, SpriteID.Steelborder.BOTTOM_RIGHT,
+				width - sprites.widthOf(SpriteID.Steelborder.BOTTOM_RIGHT, CORNER_WIDTH),
+				height - sprites.heightOf(SpriteID.Steelborder.BOTTOM_RIGHT, CORNER_HEIGHT));
+		}
+		finally
+		{
+			g.dispose();
+		}
+		return image;
+	}
+
+	private int drawTitle(Graphics2D graphics, java.awt.Point origin, java.awt.Point local, boolean skinned)
+	{
+		// Centred across the whole window, as the bank centres its own title.
 		graphics.setFont(GameText.BOLD);
-		GameText.drawShadowed(graphics, "Group Bank (view only)", PADDING, 16, GameText.ORANGE);
+		FontMetrics metrics = graphics.getFontMetrics();
+		String title = "Group Bank (view only)";
+		GameText.drawShadowed(graphics, title, (WIDTH - metrics.stringWidth(title)) / 2,
+			GameText.centredBaseline(metrics, TITLE_TOP, TITLE_HEIGHT), GameText.ORANGE);
 
-		Rectangle close = new Rectangle(WIDTH - 20, 4, 14, 14);
+		Rectangle close = new Rectangle(WIDTH - CLOSE_RIGHT, CLOSE_TOP, CLOSE_WIDTH, CLOSE_HEIGHT);
 		boolean hovered = close.contains(local);
-		GameText.drawShadowed(graphics, "x", close.x + 4, close.y + 12,
-			hovered ? GameText.HOVER : GameText.ORANGE);
+		if (skinned)
+		{
+			sprites.draw(graphics, hovered ? SpriteID.CloseButtons.HOVERED : SpriteID.CloseButtons.BUTTON,
+				close.x, close.y);
+		}
+		else
+		{
+			GameText.drawShadowed(graphics, "x", close.x + 9, close.y + 16,
+				hovered ? GameText.HOVER : GameText.ORANGE);
+		}
 
 		frameClose = toCanvas(close, origin);
-		return TITLE_HEIGHT;
+		return CONTENT_TOP;
 	}
 
 	/**
@@ -425,10 +560,10 @@ public class GroupBankOverlay extends Overlay
 			return;
 		}
 
-		int x = area.x + area.width + 1;
-		frameScrollbar = toCanvas(new Rectangle(x, area.y, SCROLLBAR_WIDTH - 2, area.height), origin);
+		int x = area.x + area.width + SCROLLBAR_GAP;
+		frameScrollbar = toCanvas(new Rectangle(x, area.y, SCROLLBAR_WIDTH, area.height), origin);
 		graphics.setColor(BankStyle.SEARCH_BACKGROUND);
-		graphics.fillRect(x, area.y, SCROLLBAR_WIDTH - 2, area.height);
+		graphics.fillRect(x, area.y, SCROLLBAR_WIDTH, area.height);
 
 		int thumbHeight = Math.max(12, area.height * VISIBLE_ROWS / totalRows);
 		int travel = area.height - thumbHeight;
@@ -436,7 +571,7 @@ public class GroupBankOverlay extends Overlay
 		int thumbY = area.y + (int) ((long) travel * Math.min(firstRow, maxScroll) / maxScroll);
 
 		graphics.setColor(BankStyle.BORDER);
-		graphics.fillRect(x, thumbY, SCROLLBAR_WIDTH - 2, thumbHeight);
+		graphics.fillRect(x, thumbY, SCROLLBAR_WIDTH, thumbHeight);
 	}
 
 	private void drawFooter(Graphics2D graphics, int height)
@@ -450,7 +585,9 @@ public class GroupBankOverlay extends Overlay
 			text.append("  ·  ").append(BankStyle.gp(viewer.getVisibleValue()))
 				.append(config.natureRuneCost() > 0 ? " alch profit" : " alch");
 		}
-		GameText.drawShadowed(graphics, text.toString(), PADDING, height - 6, GameText.ORANGE);
+		int baseline = GameText.centredBaseline(graphics.getFontMetrics(),
+			height - FRAME_EDGE - FOOTER_HEIGHT, FOOTER_HEIGHT);
+		GameText.drawShadowed(graphics, text.toString(), PADDING, baseline, GameText.ORANGE);
 	}
 
 	// ------------------------------------------------------------------
