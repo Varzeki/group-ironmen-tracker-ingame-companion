@@ -110,8 +110,9 @@ public class RouteTracker
 			return;
 		}
 
+		// Members upload real coordinates, so compare against ours, not instance ones.
 		Player local = client.getLocalPlayer();
-		WorldPoint here = local == null ? null : local.getWorldLocation();
+		WorldPoint here = local == null ? null : WorldPoint.fromLocalInstance(client, local.getLocalLocation());
 		if (here != null && here.getPlane() == target.getPlane()
 			&& here.distanceTo2D(target) <= ARRIVAL_DISTANCE)
 		{

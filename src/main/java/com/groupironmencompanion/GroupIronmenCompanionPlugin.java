@@ -260,7 +260,7 @@ public class GroupIronmenCompanionPlugin extends Plugin
 
 		bankViewer.reset();
 		uploader.reset();
-		routeTracker.stop();
+		clientThread.invoke(routeTracker::stop);
 		clientThread.invoke(mapMarkers::clear);
 		groupState.reset();
 	}
