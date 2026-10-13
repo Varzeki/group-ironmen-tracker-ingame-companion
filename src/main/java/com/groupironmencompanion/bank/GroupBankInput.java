@@ -1,6 +1,7 @@
 package com.groupironmencompanion.bank;
 
 import com.groupironmencompanion.GroupIronmenCompanionConfig;
+import java.awt.Cursor;
 import java.awt.Rectangle;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
@@ -10,19 +11,43 @@ import net.runelite.client.callback.ClientThread;
 import net.runelite.client.game.chatbox.ChatboxPanelManager;
 import net.runelite.client.input.MouseAdapter;
 import net.runelite.client.input.MouseWheelListener;
+import net.runelite.client.ui.ClientUI;
+import net.runelite.client.ui.overlay.OverlayManager;
 
 /**
  * Mouse and keyboard handling for the group bank window.
  * <p>
  * Input is only ever consumed while the window is open and the pointer is inside it, or on
- * the small Group tab. Every action it can take is client-side: opening and closing the
- * plugin's own overlay, switching tab, scrolling, and typing into the plugin's own search
- * box. No input is translated into anything the game sends to the server.
+ * the small Group tab. Every action it can take is client-side: opening, closing and
+ * resizing the plugin's own overlay, switching tab, scrolling, and typing into the plugin's
+ * own search box. No input is translated into anything the game sends to the server.
  */
 @Singleton
 public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 {
 	private static final int SCROLL_ROWS = 3;
+
+	/**
+	 * How far in from the window's edge a press starts a resize: the width of the frame's
+	 * border, so the border itself is the handle and nothing inside it is covered.
+	 */
+	private static final int RESIZE_MARGIN = 6;
+
+	private static final int EDGE_LEFT = 1;
+	private static final int EDGE_RIGHT = 2;
+	private static final int EDGE_TOP = 4;
+	private static final int EDGE_BOTTOM = 8;
+
+	/** The edges being dragged, or 0 when not resizing. */
+	private int resizeEdges;
+
+	/** The pointer, window and stored location when the resize started. */
+	private java.awt.Point resizeStartPoint;
+	private Rectangle resizeStartWindow;
+	private java.awt.Point resizeStartLocation;
+
+	/** Whether the cursor currently shows a resize arrow that this handler put there. */
+	private boolean resizeCursorShown;
 
 	@Inject
 	private GroupBankViewer viewer;
@@ -32,6 +57,12 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 
 	@Inject
 	private GroupBankTabOverlay tabOverlay;
+
+	@Inject
+	private OverlayManager overlayManager;
+
+	@Inject
+	private ClientUI clientUI;
 
 	@Inject
 	private GroupIronmenCompanionConfig config;
@@ -93,6 +124,14 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 		{
 			// A click elsewhere dismisses the search prompt but still reaches the game.
 			clientThread.invoke(this::closeSearch);
+			return event;
+		}
+
+		int edges = edgesAt(hits.window, point);
+		if (edges != 0)
+		{
+			startResize(edges, point, hits.window);
+			event.consume();
 			return event;
 		}
 
@@ -161,12 +200,25 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 	public MouseEvent mouseReleased(MouseEvent event)
 	{
 		draggingScrollbar = false;
+		if (resizeEdges != 0)
+		{
+			finishResize(event.getPoint());
+			event.consume();
+			return event;
+		}
 		return swallowInsideWindow(event);
 	}
 
 	@Override
 	public MouseEvent mouseDragged(MouseEvent event)
 	{
+		if (resizeEdges != 0)
+		{
+			resizeTo(event.getPoint());
+			event.consume();
+			return event;
+		}
+
 		if (!draggingScrollbar)
 		{
 			return event;
@@ -206,8 +258,7 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 			return event;
 		}
 
-		int rows = Math.max(1, viewer.getRows().size());
-		int maxScroll = Math.max(0, rows - GroupBankOverlay.VISIBLE_ROWS);
+		int maxScroll = overlay.maxScrollRow();
 		int next = viewer.getScrollRow() + (event.getWheelRotation() > 0 ? SCROLL_ROWS : -SCROLL_ROWS);
 		viewer.setScrollRow(Math.max(0, Math.min(maxScroll, next)));
 
@@ -218,8 +269,143 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 	/** Scrolls by whole rows, as the scrollbar's arrows do in the bank. */
 	private void scrollBy(int rows)
 	{
-		int maxScroll = Math.max(0, viewer.getRows().size() - GroupBankOverlay.VISIBLE_ROWS);
-		viewer.setScrollRow(Math.max(0, Math.min(maxScroll, viewer.getScrollRow() + rows)));
+		viewer.setScrollRow(Math.max(0, Math.min(overlay.maxScrollRow(), viewer.getScrollRow() + rows)));
+	}
+
+	// ------------------------------------------------------------------
+	// Resizing
+	// ------------------------------------------------------------------
+
+	/**
+	 * Shows a resize arrow while the pointer is over the window's border, as RuneLite does
+	 * for its own resizable overlays. Only a cursor this handler set is ever put back, so a
+	 * custom cursor from another plugin is left alone the rest of the time.
+	 */
+	@Override
+	public MouseEvent mouseMoved(MouseEvent event)
+	{
+		if (resizeEdges == 0)
+		{
+			boolean enabled = config.bankViewer() && viewer.isOpen() && !event.isAltDown();
+			showResizeCursor(enabled ? edgesAt(overlay.getHits().window, event.getPoint()) : 0);
+		}
+		return event;
+	}
+
+	/**
+	 * Which of the window's edges a point is on, as flags, or 0 for none. Holding Alt is left
+	 * to RuneLite, which moves the window instead.
+	 */
+	private static int edgesAt(Rectangle window, java.awt.Point point)
+	{
+		if (!window.contains(point))
+		{
+			return 0;
+		}
+
+		int edges = 0;
+		if (point.x < window.x + RESIZE_MARGIN)
+		{
+			edges |= EDGE_LEFT;
+		}
+		else if (point.x >= window.x + window.width - RESIZE_MARGIN)
+		{
+			edges |= EDGE_RIGHT;
+		}
+		if (point.y < window.y + RESIZE_MARGIN)
+		{
+			edges |= EDGE_TOP;
+		}
+		else if (point.y >= window.y + window.height - RESIZE_MARGIN)
+		{
+			edges |= EDGE_BOTTOM;
+		}
+		return edges;
+	}
+
+	private void startResize(int edges, java.awt.Point point, Rectangle window)
+	{
+		resizeEdges = edges;
+		resizeStartPoint = point;
+		resizeStartWindow = new Rectangle(window);
+		java.awt.Point location = overlay.getPreferredLocation();
+		resizeStartLocation = location != null ? new java.awt.Point(location) : window.getLocation();
+		showResizeCursor(edges);
+	}
+
+	/**
+	 * Resizes to follow the pointer. The size snaps to whole item cells, and dragging the
+	 * left or top edge moves the window by however much the snapped size changed, so the
+	 * opposite edge stays exactly where it was.
+	 */
+	private void resizeTo(java.awt.Point point)
+	{
+		int dx = point.x - resizeStartPoint.x;
+		int dy = point.y - resizeStartPoint.y;
+		Rectangle start = resizeStartWindow;
+
+		int width = start.width
+			+ ((resizeEdges & EDGE_RIGHT) != 0 ? dx : 0)
+			- ((resizeEdges & EDGE_LEFT) != 0 ? dx : 0);
+		int height = start.height
+			+ ((resizeEdges & EDGE_BOTTOM) != 0 ? dy : 0)
+			- ((resizeEdges & EDGE_TOP) != 0 ? dy : 0);
+		java.awt.Dimension size = overlay.snapSize(width, height);
+
+		overlay.setPreferredSize(size);
+		if ((resizeEdges & (EDGE_LEFT | EDGE_TOP)) != 0)
+		{
+			int moveX = (resizeEdges & EDGE_LEFT) != 0 ? start.width - size.width : 0;
+			int moveY = (resizeEdges & EDGE_TOP) != 0 ? start.height - size.height : 0;
+			overlay.setPreferredLocation(new java.awt.Point(
+				resizeStartLocation.x + moveX, resizeStartLocation.y + moveY));
+		}
+	}
+
+	/** Ends a resize and stores the size, the way RuneLite stores an overlay it resized. */
+	private void finishResize(java.awt.Point point)
+	{
+		resizeTo(point);
+		resizeEdges = 0;
+		overlayManager.saveOverlay(overlay);
+		showResizeCursor(edgesAt(overlay.getHits().window, point));
+	}
+
+	private void showResizeCursor(int edges)
+	{
+		if (edges != 0)
+		{
+			clientUI.setCursor(Cursor.getPredefinedCursor(cursorFor(edges)));
+			resizeCursorShown = true;
+		}
+		else if (resizeCursorShown)
+		{
+			clientUI.setCursor(clientUI.getDefaultCursor());
+			resizeCursorShown = false;
+		}
+	}
+
+	private static int cursorFor(int edges)
+	{
+		switch (edges)
+		{
+			case EDGE_LEFT | EDGE_TOP:
+				return Cursor.NW_RESIZE_CURSOR;
+			case EDGE_RIGHT | EDGE_TOP:
+				return Cursor.NE_RESIZE_CURSOR;
+			case EDGE_LEFT | EDGE_BOTTOM:
+				return Cursor.SW_RESIZE_CURSOR;
+			case EDGE_RIGHT | EDGE_BOTTOM:
+				return Cursor.SE_RESIZE_CURSOR;
+			case EDGE_LEFT:
+				return Cursor.W_RESIZE_CURSOR;
+			case EDGE_RIGHT:
+				return Cursor.E_RESIZE_CURSOR;
+			case EDGE_TOP:
+				return Cursor.N_RESIZE_CURSOR;
+			default:
+				return Cursor.S_RESIZE_CURSOR;
+		}
 	}
 
 	// ------------------------------------------------------------------
@@ -298,7 +484,7 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 				if (overlay.getPreferredLocation() == null)
 				{
 					overlay.setPreferredLocation(tabOverlay.defaultLocation(
-						GroupBankOverlay.WIDTH, overlay.getWindowSize().height));
+						overlay.getWindowSize().width, overlay.getWindowSize().height));
 				}
 			});
 		}

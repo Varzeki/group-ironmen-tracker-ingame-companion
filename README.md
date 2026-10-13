@@ -38,6 +38,9 @@ It only swallows clicks inside its own frame, so your own bank stays fully usabl
   the full name.
 - Click the search box and type to filter. `Esc` clears, then closes.
 - Alt-drag to move it, like any RuneLite overlay.
+- Drag any edge or corner of its frame to resize it, no Alt needed. It grows and shrinks in
+  whole bank cells, from 4 x 3 items up to whatever fits on screen, and RuneLite remembers
+  the size along with the position.
 - **Themes:** it follows interface reskins from the Resource Packs plugin and RuneLite's
   Interface Styles, including the bank's line colours, and the map list, skills panel and
   tooltips take RuneLite's overlay colour. Turn off **Match interface theme** for the plain

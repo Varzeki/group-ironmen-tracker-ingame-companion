@@ -31,8 +31,8 @@ public class GroupBankViewer
 	public static final String TAB_ALL = "All";
 	public static final String TAB_SHARED = "Group Storage";
 
-	/** Items per row in the grid. */
-	public static final int COLUMNS = 8;
+	/** Items per row in the grid until the window is resized. */
+	public static final int DEFAULT_COLUMNS = 8;
 
 	@Inject
 	private GroupState groupState;
@@ -73,6 +73,10 @@ public class GroupBankViewer
 
 	@Getter
 	private long visibleValue;
+
+	/** Items per row, which follows the window's width. */
+	@Getter
+	private volatile int columns = DEFAULT_COLUMNS;
 
 	// ------------------------------------------------------------------
 	// Window state
@@ -117,6 +121,16 @@ public class GroupBankViewer
 	public void setSearchFocused(boolean focused)
 	{
 		this.searchFocused = focused;
+	}
+
+	/** Sets how many items fit across the window, laying the rows out again if it changed. */
+	public void setColumns(int columns)
+	{
+		if (this.columns != columns)
+		{
+			this.columns = columns;
+			markDirty();
+		}
 	}
 
 	public void markDirty()
@@ -290,7 +304,7 @@ public class GroupBankViewer
 			}
 
 			current.add(entry);
-			if (current.size() == COLUMNS)
+			if (current.size() == columns)
 			{
 				result.add(Row.items(current));
 				current = new ArrayList<>();
