@@ -284,6 +284,9 @@ public class GroupBankOverlay extends Overlay
 	@Inject
 	private GroupApi api;
 
+	@Inject
+	private GroupBankTabOverlay tabOverlay;
+
 	/**
 	 * The frame composed into one image, since it is a few hundred sprite draws and only
 	 * changes when the window's size or the sprites themselves do.
@@ -404,6 +407,18 @@ public class GroupBankOverlay extends Overlay
 			chrome, canvasHeight);
 		frameRows = (height - chrome) / CELL_HEIGHT;
 		geometry = new Geometry(columns, frameRows, frameWidth, height, chrome);
+
+		// No stored position means the window has never been placed, or has just been reset
+		// with Alt and right-click, which clears the position and size. Either way it belongs
+		// beside the bank, under the Group tab, so it is placed here, on the client thread
+		// where the bank can be read, and drawn there from the next frame. A reset size has
+		// already gone back to the default above.
+		if (getPreferredLocation() == null)
+		{
+			setPreferredLocation(tabOverlay.defaultLocation(frameWidth, height));
+			hits = HitBoxes.EMPTY;
+			return null;
+		}
 
 		java.awt.Point origin = getBounds().getLocation();
 		Point mouse = client.getMouseCanvasPosition();

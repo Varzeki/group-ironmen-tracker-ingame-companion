@@ -449,18 +449,6 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 	// ------------------------------------------------------------------
 
 	/**
-	 * Opens the window, placing it only if the user has never moved it.
-	 * <p>
-	 * The window is opened first and unconditionally, because this is called from the AWT
-	 * thread (the hotkey and the Group tab) as well as from game events. Working out where to
-	 * put it means reading the bank widget, which is only legal on the client thread, so that
-	 * part hops threads. Doing it inline was why the hotkey and the tab appeared to do
-	 * nothing: the client call threw before the window was ever opened.
-	 * <p>
-	 * A remembered position always wins. RuneLite persists it when you alt-drag the overlay
-	 * and restores it on startup, so re-docking on every open would throw that away.
-	 */
-	/**
 	 * Closes the window and any search prompt with it. Safe to call from any thread, so the
 	 * hotkey and the game events that dismiss the window can share one path.
 	 */
@@ -473,20 +461,17 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 		});
 	}
 
+	/**
+	 * Opens the window. Where it goes is decided as it is drawn: a window with no stored
+	 * position is placed beside the bank then (see {@link GroupBankOverlay}), which is on the
+	 * client thread where the bank widget can be read. Doing that inline here was once why
+	 * the hotkey and the tab appeared to do nothing, since this is called from the AWT thread.
+	 * <p>
+	 * A remembered position always wins. RuneLite persists it when you alt-drag the overlay
+	 * and restores it on startup, so re-docking on every open would throw that away.
+	 */
 	public void openBesideBank()
 	{
 		viewer.setOpen(true);
-
-		if (overlay.getPreferredLocation() == null)
-		{
-			clientThread.invoke(() ->
-			{
-				if (overlay.getPreferredLocation() == null)
-				{
-					overlay.setPreferredLocation(tabOverlay.defaultLocation(
-						overlay.getWindowSize().width, overlay.getWindowSize().height));
-				}
-			});
-		}
 	}
 }
