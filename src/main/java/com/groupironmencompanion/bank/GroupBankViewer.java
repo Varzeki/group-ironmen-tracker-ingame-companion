@@ -83,7 +83,8 @@ public class GroupBankViewer
 		if (this.open != open)
 		{
 			this.open = open;
-			this.searchFocused = open && !filter.isEmpty();
+			// Focus means the search prompt is open, and opening the window does not open it.
+			this.searchFocused = false;
 			markDirty();
 		}
 	}

@@ -9,6 +9,7 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.game.chatbox.ChatboxPanelManager;
+import net.runelite.client.game.chatbox.ChatboxTextInput;
 import net.runelite.client.input.MouseAdapter;
 import net.runelite.client.input.MouseWheelListener;
 
@@ -48,6 +49,9 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 
 	/** Set while the scrollbar is being dragged, so movement keeps scrolling after the press. */
 	private boolean draggingScrollbar;
+
+	/** The search prompt this window opened, so closing it never closes anyone else's. */
+	private ChatboxTextInput searchInput;
 
 	// ------------------------------------------------------------------
 	// Mouse
@@ -232,21 +236,26 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 	private void openSearch()
 	{
 		viewer.setSearchFocused(true);
-		chatboxPanelManager.openTextInput("Search group bank")
+		searchInput = chatboxPanelManager.openTextInput("Search group bank")
 			.value(viewer.getFilter())
 			.onChanged(value -> viewer.setFilter(value.trim()))
 			.onClose(() -> viewer.setSearchFocused(false))
 			.build();
 	}
 
-	/** Closes the search prompt if it is the thing currently open. */
+	/**
+	 * Closes the search prompt if it is the thing currently open. The chatbox may have been
+	 * taken over since, by a Withdraw-X amount, the bank's own search or another plugin's
+	 * prompt, and closing that would throw away whatever the player was typing.
+	 */
 	private void closeSearch()
 	{
-		if (viewer.isSearchFocused())
+		viewer.setSearchFocused(false);
+		if (searchInput != null && chatboxPanelManager.getCurrentInput() == searchInput)
 		{
-			viewer.setSearchFocused(false);
 			chatboxPanelManager.close();
 		}
+		searchInput = null;
 	}
 
 	// ------------------------------------------------------------------
