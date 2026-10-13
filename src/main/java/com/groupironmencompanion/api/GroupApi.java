@@ -43,6 +43,9 @@ public class GroupApi
 {
 	public static final String PUBLIC_BASE_URL = "https://groupiron.men";
 
+	/** What the server says, with a 401, about a character that is not in the group. */
+	private static final String NOT_A_MEMBER = "not a member";
+
 	/** Config group of the official tracker plugin, read so credentials need entering once. */
 	public static final String TRACKER_CONFIG_GROUP = "GroupIronmenTracker";
 
@@ -277,7 +280,7 @@ public class GroupApi
 	 *         could not be reached or failed
 	 */
 	@Nullable
-	public Boolean isPlayerInGroup(String playerName)
+	public Boolean isPlayerInGroup(String playerName) throws NotAuthorisedException
 	{
 		String groupName = getGroupName();
 		String token = getGroupToken();
@@ -301,7 +304,15 @@ public class GroupApi
 			}
 			if (response.code() == 401 || response.code() == 403)
 			{
-				return false;
+				// The server answers 401 both for a character outside the group and, before
+				// it gets that far, for a wrong token. Only the first says so in its body.
+				ResponseBody body = response.body();
+				String text = body == null ? "" : body.string();
+				if (text.contains(NOT_A_MEMBER))
+				{
+					return false;
+				}
+				throw new NotAuthorisedException();
 			}
 			log.debug("am-i-in-group returned {}", response.code());
 			return null;

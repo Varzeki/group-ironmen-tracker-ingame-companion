@@ -402,7 +402,18 @@ public class GroupUploader
 
 		if (!membershipConfirmed || !playerName.equals(membershipCheckedFor))
 		{
-			Boolean member = api.isPlayerInGroup(playerName);
+			Boolean member;
+			try
+			{
+				member = api.isPlayerInGroup(playerName);
+			}
+			catch (GroupApi.NotAuthorisedException e)
+			{
+				status = "The server rejected the group token";
+				active = false;
+				backOff();
+				return;
+			}
 			if (member == null)
 			{
 				status = "Could not reach the server, retrying shortly";
