@@ -58,14 +58,43 @@ hand; see [tools/mapdump](tools/mapdump/README.md).
 
 **Side panel** - five tabs:
 
-- **Group** - each member's hitpoints, prayer, run energy, world and last-seen time.
+- **Group** - each member's hitpoints, prayer, run energy, world, last-seen time and what
+  they seem to be doing (see below).
 - **Items** - search everything the group owns and see who is holding it.
 - **Skills** - total level and experience, or one skill compared across the group.
 - **Quests** - completion per member, plus a search showing where everyone stands on a quest.
 - **Diaries** - achievement diary completion per member, overall or broken down by region
   and tier.
 
-**Status overlay** (off by default) - the same vitals as a compact in-game overlay.
+**Status overlay** (off by default) - the group at a glance, drawn in the game's own fonts
+and colours. Each member is their name in their colour with their world beside it, thin
+hitpoints, prayer and run energy bars, and one line saying what they seem to be doing.
+Offline members are a single grey line with how long ago they were seen. It draws straight
+over the game, or on a translucent backdrop if you prefer; alt-drag it to move it, and alt-drag
+its edge to change its width. Numbers can be written on the bars or beside them.
+
+**What members are doing** - a best guess, shown in the status overlay and the side panel:
+"Fishing at Catherby", "Fighting Goblin (43%)", "Woodcutting at Draynor Village",
+"Banking at Seers' Village", "Teleported to Varrock", "Doing Gertrude's Cat",
+"Idle at Lumbridge (3m)".
+
+It is inferred, and can be wrong. The tracker shares no activity of its own, and the
+groupiron.men server accepts no new fields, so it is worked out from what changes between
+updates: experience gained in the last minute or so, position and the Sailing boat flag,
+quest states, bank and inventory changes, and the NPC a member is interacting with. Things
+it cannot see:
+
+- Objects never count as an interaction, so woodcutting, mining or cooking is only
+  recognised once the experience arrives.
+- Quests only report not started, started or finished. A quest shows as being done only
+  if it was started while you were watching, and a quest finished by a tracker user can
+  take up to a minute to show.
+- Standing still and being logged out look the same until the offline threshold passes.
+- Instances report the template they were copied from; raids, bosses and the player-owned
+  house are named, but an odd instance may show a nearby place instead.
+
+Places come from region names and the world map's own labels (see Credits), so new areas are
+named without a plugin update.
 
 ## Setup
 
@@ -99,11 +128,11 @@ have anything to show.
 | Section | What it controls |
 | --- | --- |
 | Connection | Group name, token, self-hosted server URL, refresh interval, offline threshold |
-| Side panel | Enable, show activity, show offline members, include yourself |
+| Side panel | Enable, show what members are doing, show offline members, include yourself |
 | Group bank | Enable, hotkey, bank tab, open/close with the bank, item values |
 | Skills tab | Enable hover, panel position, include yourself, include offline members |
 | World map | Enable markers, dungeon entrance markers, include offline members, member list, routing |
-| Status overlay | Enable, vitals, activity, offline members, include yourself |
+| Status overlay | Enable, vitals bars, what members are doing, offline members, include yourself, numbers on or beside the bars, show where members are, show world, idle threshold, backdrop |
 | Member colours | One colour per member, assigned alphabetically |
 | Data sharing | Whether to upload your own data when the tracker plugin is absent |
 
@@ -127,8 +156,8 @@ bar, so this plugin is built to stay clearly inside
 - **Nothing in the game scene or on the minimap.** Member positions are drawn on the world
   map only.
 - **No PvP or combat assistance.** The only combat-adjacent data shown is what a group member
-  is interacting with, in the side panel and the optional status overlay, never as a scene
-  overlay and never for players. It can be switched off. This is your own five-person group,
+  is interacting with and a guess at what they are doing, in the side panel and the optional
+  status overlay, never as a scene overlay and never for players outside the group. It can be switched off. This is your own five-person group,
   who each opted in by running a tracker plugin; it is not scouting information about anyone
   else.
 - **No reflection**, no JNI, no external processes, no filesystem access, no runtime code
@@ -147,7 +176,8 @@ none of them can regress quietly.
   hung server cannot stall the client or another plugin's scheduled work.
 - Responses are parsed into plain data classes and are size-capped. Response bodies are never
   logged, and neither is your token.
-- No files are read or written. The one bundled resource is read from the jar.
+- No files are read or written. The bundled resources (map areas and place names) are read
+  from the jar.
 
 ## Building
 
@@ -167,6 +197,15 @@ asserts that a spread of known dungeons still resolve to the right entrances.
 Where the cache defines no route to the surface - the Abyss, Tutorial Island, a couple of
 Prifddinas interiors - a member still gets their true-position marker and the area's real
 name in the tooltip, just no entrance marker.
+
+## Credits
+
+Place names combine the region list from
+[Location Display](https://github.com/trinhc2/Location-Display) by trinhc2 (BSD 2-Clause)
+with the world map's own labels from the game cache. The lookup and the bundled
+`places.gz` are ported from [Golems Don't Die](https://github.com/Varzeki/golems-dont-die)
+by Varzeki (BSD 2-Clause), which also has the generator. Region ids for the instances the map
+labels name badly come from RuneLite's Discord plugin.
 
 ## Not implemented
 
