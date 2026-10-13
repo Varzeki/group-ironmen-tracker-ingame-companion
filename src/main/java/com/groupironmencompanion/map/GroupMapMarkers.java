@@ -112,6 +112,7 @@ public class GroupMapMarkers
 			if (marker == null)
 			{
 				marker = new WorldMapPoint(position, MarkerImages.pin(colour, name));
+				marker.setImagePoint(MarkerImages.TIP);
 				marker.setJumpOnClick(false);
 				marker.setSnapToEdge(false);
 				worldMapPointManager.add(marker);
@@ -132,6 +133,7 @@ public class GroupMapMarkers
 				if (entranceMarker == null)
 				{
 					entranceMarker = new WorldMapPoint(located.getEntrance(), MarkerImages.entrance(colour, name));
+					entranceMarker.setImagePoint(MarkerImages.TIP);
 					entranceMarker.setJumpOnClick(false);
 					entranceMarker.setSnapToEdge(false);
 					worldMapPointManager.add(entranceMarker);

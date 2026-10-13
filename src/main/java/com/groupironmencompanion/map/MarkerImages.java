@@ -9,6 +9,7 @@ import java.awt.geom.Ellipse2D;
 import java.awt.geom.GeneralPath;
 import java.awt.image.BufferedImage;
 import java.util.Locale;
+import net.runelite.api.Point;
 
 /**
  * Draws the world map markers. Everything is generated at runtime so the plugin ships no
@@ -18,6 +19,12 @@ final class MarkerImages
 {
 	private static final int WIDTH = 18;
 	private static final int HEIGHT = 24;
+
+	/**
+	 * The tip of the pin, the point of the image that belongs on the member's tile. Without
+	 * it the world map centres the image there, which puts the tip half a pin too low.
+	 */
+	static final Point TIP = new Point(WIDTH / 2, HEIGHT - 1);
 
 	private MarkerImages()
 	{
