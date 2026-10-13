@@ -43,7 +43,7 @@ public class GroupApi
 	public static final String PUBLIC_BASE_URL = "https://groupiron.men";
 
 	/** Config group of the official tracker plugin, read so credentials need entering once. */
-	private static final String TRACKER_CONFIG_GROUP = "GroupIronmenTracker";
+	public static final String TRACKER_CONFIG_GROUP = "GroupIronmenTracker";
 
 	private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 	private static final String USER_AGENT =
@@ -124,6 +124,15 @@ public class GroupApi
 	{
 		String own = config.groupToken().trim();
 		return own.isEmpty() ? trackerConfig("groupToken") : own;
+	}
+
+	/**
+	 * True when the official tracker plugin has both a group name and a token. Without them
+	 * it uploads nothing, however long it is enabled.
+	 */
+	public boolean trackerHasCredentials()
+	{
+		return !trackerConfig("groupName").isEmpty() && !trackerConfig("groupToken").isEmpty();
 	}
 
 	private String trackerConfig(String key)

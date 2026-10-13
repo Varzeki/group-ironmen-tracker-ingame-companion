@@ -87,8 +87,8 @@ the in-game views populate from what the tracker is already uploading.
 Everyone in the group needs *something* uploading their character data for any of this to
 have anything to show.
 
-- If the official **Group Ironmen Tracker** plugin is installed and enabled, it does the
-  uploading and this plugin only reads. The two never both upload.
+- If the official **Group Ironmen Tracker** plugin is running with a group name and token set,
+  it does the uploading and this plugin only reads. The two never both upload.
 - If it is not, this plugin uploads the same fields in the same format, so the website keeps
   working either way. Collection log progress is the one thing it does not collect; install
   the tracker plugin if your group wants that.

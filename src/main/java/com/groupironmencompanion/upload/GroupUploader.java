@@ -360,7 +360,15 @@ public class GroupUploader
 	/** Posts everything staged since the last call. Must not run on the client thread. */
 	public void flush(String playerName)
 	{
-		if (playerName == null || !shouldUpload())
+		if (!shouldUpload())
+		{
+			// Nothing new is staged while the tracker uploads, but what was staged before it
+			// took over is stale, and the tracker may since have posted values that lastSent
+			// would wrongly suppress. Start clean whenever this plugin takes over again.
+			reset();
+			return;
+		}
+		if (playerName == null)
 		{
 			active = false;
 			return;

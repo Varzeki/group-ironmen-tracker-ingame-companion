@@ -42,6 +42,7 @@ import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
+import net.runelite.client.events.PluginChanged;
 import net.runelite.client.input.KeyManager;
 import net.runelite.client.input.MouseManager;
 import net.runelite.client.game.ItemManager;
@@ -446,8 +447,20 @@ public class GroupIronmenCompanionPlugin extends Plugin
 	}
 
 	@Subscribe
+	public void onPluginChanged(PluginChanged event)
+	{
+		// The tracker may have just started or stopped; don't wait out the detector's cache.
+		trackerDetector.invalidate();
+	}
+
+	@Subscribe
 	public void onConfigChanged(ConfigChanged event)
 	{
+		if (GroupApi.TRACKER_CONFIG_GROUP.equals(event.getGroup()))
+		{
+			onTrackerConfigChanged(event.getKey());
+			return;
+		}
 		if (!GroupIronmenCompanionConfig.GROUP.equals(event.getGroup()))
 		{
 			return;
@@ -458,9 +471,7 @@ public class GroupIronmenCompanionPlugin extends Plugin
 			case "groupName":
 			case "groupToken":
 			case "baseUrlOverride":
-				groupState.reset();
-				uploader.reset();
-				lastPollMillis = 0;
+				resetConnection();
 				break;
 
 			case "showSidePanel":
@@ -517,6 +528,33 @@ public class GroupIronmenCompanionPlugin extends Plugin
 				}
 				break;
 		}
+	}
+
+	/**
+	 * The tracker's settings decide whether it uploads, and they are the credentials used
+	 * when this plugin's own are blank, so a change there matters as much as one here.
+	 */
+	private void onTrackerConfigChanged(String key)
+	{
+		trackerDetector.invalidate();
+		switch (key)
+		{
+			case "groupName":
+			case "groupToken":
+			case "baseUrlOverride":
+				resetConnection();
+				break;
+			default:
+				break;
+		}
+	}
+
+	/** Starts over with whichever group the settings now point at, fetching it in full. */
+	private void resetConnection()
+	{
+		groupState.reset();
+		uploader.reset();
+		lastPollMillis = 0;
 	}
 
 	// ------------------------------------------------------------------

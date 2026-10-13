@@ -1,12 +1,14 @@
 package com.groupironmencompanion;
 
+import com.groupironmencompanion.api.GroupApi;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginManager;
 
 /**
- * Detects whether the official Group Ironmen Tracker plugin is installed and running.
+ * Detects whether the official Group Ironmen Tracker plugin is installed, running and set
+ * up to upload.
  * <p>
  * When it is, this plugin stays purely a reader: the tracker owns uploading and we would
  * only duplicate its traffic. When it is not, our own uploader takes over so the plugin
@@ -28,11 +30,18 @@ public class TrackerDetector
 	@Inject
 	private PluginManager pluginManager;
 
+	@Inject
+	private GroupApi api;
+
 	private volatile long checkedAt;
 	private volatile boolean active;
 	private volatile boolean installed;
 
-	/** True when the official tracker plugin is installed and enabled. */
+	/**
+	 * True when the official tracker plugin is running and has a group name and token, which
+	 * is when it uploads. Enabled is not enough: a plugin that failed to start, or one with
+	 * no credentials, uploads nothing, and then this plugin has to.
+	 */
 	public boolean isTrackerActive()
 	{
 		refreshIfStale();
@@ -67,7 +76,7 @@ public class TrackerDetector
 			if (TRACKER_CLASS.equals(plugin.getClass().getName()))
 			{
 				foundInstalled = true;
-				foundActive = pluginManager.isPluginEnabled(plugin);
+				foundActive = pluginManager.isPluginActive(plugin) && api.trackerHasCredentials();
 				break;
 			}
 		}
