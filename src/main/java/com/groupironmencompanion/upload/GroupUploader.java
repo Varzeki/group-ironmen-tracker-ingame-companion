@@ -165,6 +165,18 @@ public class GroupUploader
 		stage("coordinates", UploadPayloads.coordinates(point, isOnBoat(local)));
 	}
 
+	/**
+	 * Stages skills, inventory and equipment as they are now. Used after a login or hop: the
+	 * reset that follows a character change throws away whatever the login burst staged, and
+	 * these fields would otherwise stay missing until they next change.
+	 */
+	public void snapshot()
+	{
+		onSkillsChanged();
+		onItemContainerChanged(InventoryID.INV, client.getItemContainer(InventoryID.INV));
+		onItemContainerChanged(InventoryID.WORN, client.getItemContainer(InventoryID.WORN));
+	}
+
 	public void onItemContainerChanged(int containerId, @Nullable ItemContainer container)
 	{
 		if (!collectable() || container == null)

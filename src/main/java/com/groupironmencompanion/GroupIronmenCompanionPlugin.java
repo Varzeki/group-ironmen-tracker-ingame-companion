@@ -371,9 +371,12 @@ public class GroupIronmenCompanionPlugin extends Plugin
 		String name = local == null ? null : local.getName();
 		if (name != null && !name.equals(localPlayerName))
 		{
+			// Reset before publishing the new name, or a flush in between could post what
+			// was staged for the previous character under this one's name.
+			uploader.reset();
 			localPlayerName = name;
 			groupState.setLocalPlayerName(name);
-			uploader.reset();
+			uploader.snapshot();
 		}
 
 		uploader.onVitalsChanged();
